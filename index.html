@@ -138,6 +138,7 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   <div id="homeWorkoutButtons"></div>
   <div id="todayLog" style="margin-top:12px"></div>
   <button class="btn btn-secondary" style="margin-top:8px" onclick="switchPage('Body',2)">⚖️ Log Body Metrics</button>
+  <div id="ouraHome" style="margin-top:16px"></div>
 </div>
 
 <!-- RECORD PAGE -->
@@ -180,10 +181,12 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     <button class="tab active" onclick="showTrendTab('weights',this)">Weights</button>
     <button class="tab" onclick="showTrendTab('body',this)">Body</button>
     <button class="tab" onclick="showTrendTab('activity',this)">Activity</button>
+    <button class="tab" onclick="showTrendTab('oura',this)">Oura</button>
   </div>
   <div id="trendsWeights"></div>
   <div id="trendsBody" style="display:none"></div>
   <div id="trendsActivity" style="display:none"></div>
+  <div id="trendsOura" style="display:none"></div>
 </div>
 
 <!-- SETUP PAGE -->
@@ -308,6 +311,7 @@ function switchPage(name, idx) {
 function renderHome() {
   renderWeekStreak();
   renderLatestMetrics();
+  renderOuraHome();
   renderHomeWorkouts();
   renderTodayLog();
   highlightTodayActivities();
@@ -736,9 +740,11 @@ function startRestTimer(secs) {
 
 // --- TRENDS ---
 function showTrendTab(tab, btn) {
-  ['weights','body','activity'].forEach(t=>{
-    document.getElementById('trends'+t.charAt(0).toUpperCase()+t.slice(1)).style.display=t===tab?'block':'none';
+  ['weights','body','activity','oura'].forEach(t=>{
+    const el=document.getElementById('trends'+t.charAt(0).toUpperCase()+t.slice(1));
+    if(el) el.style.display=t===tab?'block':'none';
   });
+  if(tab==='oura') renderOuraTrends();
   btn.parentElement.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   btn.classList.add('active');
   renderTrends();
@@ -839,6 +845,143 @@ function importData(event) {
     } catch { alert('Invalid file'); }
   };
   reader.readAsText(file);
+}
+
+// --- OURA ---
+const OURA_PROXY = 'http://148.230.92.220:8077';
+
+async function fetchOura(endpoint) {
+  try {
+    const r = await fetch(`${OURA_PROXY}${endpoint}`);
+    if(!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) { console.error('Oura fetch error:', e); return null; }
+}
+
+async function renderOuraHome() {
+  const el = document.getElementById('ouraHome');
+  el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:8px">Loading Oura data...</div>';
+  
+  const t = today();
+  const yesterday = new Date(new Date().setDate(new Date().getDate()-1)).toISOString().split('T')[0];
+  
+  const [sleepData, readinessData, activityData] = await Promise.all([
+    fetchOura(`/v2/usercollection/daily_sleep?start_date=${yesterday}&end_date=${t}`),
+    fetchOura(`/v2/usercollection/daily_readiness?start_date=${yesterday}&end_date=${t}`),
+    fetchOura(`/v2/usercollection/daily_activity?start_date=${yesterday}&end_date=${t}`)
+  ]);
+  
+  const sleep = sleepData?.data?.slice(-1)[0];
+  const readiness = readinessData?.data?.slice(-1)[0];
+  const activity = activityData?.data?.slice(-1)[0];
+  
+  if(!sleep && !readiness && !activity) {
+    el.innerHTML = '<div class="card" style="text-align:center;color:var(--text2);font-size:13px">⌚ Oura: no data today yet</div>';
+    return;
+  }
+  
+  const scoreColor = (s) => s >= 85 ? 'var(--green)' : s >= 70 ? 'var(--yellow)' : 'var(--accent)';
+  const scoreRing = (score, label, emoji) => {
+    if(!score) return '';
+    return `<div class="metric-card">
+      <div class="value" style="color:${scoreColor(score)}">${score}</div>
+      <div class="label">${emoji} ${label}</div>
+    </div>`;
+  };
+  
+  let html = '<h2>⌚ Oura Ring</h2><div class="metric-grid">';
+  html += scoreRing(sleep?.score, 'Sleep', '😴');
+  html += scoreRing(readiness?.score, 'Readiness', '⚡');
+  
+  if(readiness?.contributors) {
+    const c = readiness.contributors;
+    html += `<div class="metric-card"><div class="value">${c.resting_heart_rate || '—'}</div><div class="label">❤️ Resting HR</div></div>`;
+    html += `<div class="metric-card"><div class="value">${c.hrv_balance || '—'}</div><div class="label">📊 HRV Balance</div></div>`;
+  }
+  html += '</div>';
+  
+  // Low readiness warning
+  if(readiness?.score && readiness.score < 70) {
+    html += `<div class="card" style="border-left:3px solid var(--accent);padding:12px">
+      <div style="font-size:14px;font-weight:600;color:var(--accent)">⚠️ Low Readiness (${readiness.score})</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px">Consider a lighter session today or active recovery.</div>
+    </div>`;
+  }
+  
+  // Sleep details
+  if(sleep?.contributors) {
+    const c = sleep.contributors;
+    html += `<div class="card"><div class="card-title">😴 Sleep Breakdown</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:12px">
+        <span style="color:var(--text2)">Deep: <strong style="color:${scoreColor(c.deep_sleep)}">${c.deep_sleep}</strong></span>
+        <span style="color:var(--text2)">REM: <strong style="color:${scoreColor(c.rem_sleep)}">${c.rem_sleep}</strong></span>
+        <span style="color:var(--text2)">Efficiency: <strong style="color:${scoreColor(c.efficiency)}">${c.efficiency}</strong></span>
+        <span style="color:var(--text2)">Restfulness: <strong style="color:${scoreColor(c.restfulness)}">${c.restfulness}</strong></span>
+      </div></div>`;
+  }
+  
+  el.innerHTML = html;
+}
+
+async function renderOuraTrends() {
+  const el = document.getElementById('trendsOura');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:16px">Loading Oura trends...</div>';
+  
+  const end = today();
+  const start = new Date(new Date().setDate(new Date().getDate()-30)).toISOString().split('T')[0];
+  
+  const [sleepData, readinessData] = await Promise.all([
+    fetchOura(`/v2/usercollection/daily_sleep?start_date=${start}&end_date=${end}`),
+    fetchOura(`/v2/usercollection/daily_readiness?start_date=${start}&end_date=${end}`)
+  ]);
+  
+  if(!sleepData?.data?.length && !readinessData?.data?.length) {
+    el.innerHTML = '<div class="empty"><p>No Oura data available</p></div>';
+    return;
+  }
+  
+  let html = '';
+  
+  // Sleep score trend
+  if(sleepData?.data?.length) {
+    const pts = sleepData.data;
+    const vals = pts.map(p=>p.score).filter(Boolean);
+    const max = Math.max(...vals), min = Math.min(...vals), range = max-min||1;
+    const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+    const scoreColor = (s) => s >= 85 ? 'var(--green)' : s >= 70 ? 'var(--yellow)' : 'var(--accent)';
+    
+    html += `<div class="card"><div class="card-title">😴 Sleep Score (30 days)</div>
+      <div class="mini-chart">${pts.slice(-30).map(p=>{
+        const h = p.score ? Math.max(8,((p.score-min)/range)*100) : 0;
+        return `<div class="mini-bar" style="height:${h}%;background:${scoreColor(p.score)}"><div class="tip">${p.score||''}</div></div>`;
+      }).join('')}</div>
+      <div class="trend-stats">
+        <div class="trend-stat">Average: <span>${avg}</span></div>
+        <div class="trend-stat">Latest: <span>${vals[vals.length-1]}</span></div>
+      </div></div>`;
+  }
+  
+  // Readiness score trend
+  if(readinessData?.data?.length) {
+    const pts = readinessData.data;
+    const vals = pts.map(p=>p.score).filter(Boolean);
+    const max = Math.max(...vals), min = Math.min(...vals), range = max-min||1;
+    const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+    const scoreColor = (s) => s >= 85 ? 'var(--green)' : s >= 70 ? 'var(--yellow)' : 'var(--accent)';
+    
+    html += `<div class="card"><div class="card-title">⚡ Readiness Score (30 days)</div>
+      <div class="mini-chart">${pts.slice(-30).map(p=>{
+        const h = p.score ? Math.max(8,((p.score-min)/range)*100) : 0;
+        return `<div class="mini-bar" style="height:${h}%;background:${scoreColor(p.score)}"><div class="tip">${p.score||''}</div></div>`;
+      }).join('')}</div>
+      <div class="trend-stats">
+        <div class="trend-stat">Average: <span>${avg}</span></div>
+        <div class="trend-stat">Latest: <span>${vals[vals.length-1]}</span></div>
+      </div></div>`;
+  }
+  
+  el.innerHTML = html;
 }
 
 // --- UTILS ---
