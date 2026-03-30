@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Workout Tracker</title>
+<style>
+:root {
+  --bg: #0f0f0f;
+  --surface: #1a1a2e;
+  --surface2: #16213e;
+  --accent: #e94560;
+  --accent2: #0f3460;
+  --text: #eee;
+  --text2: #999;
+  --green: #4ade80;
+  --yellow: #fbbf24;
+  --radius: 12px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; padding-bottom:80px; }
+.page { display:none; padding:16px; max-width:500px; margin:0 auto; }
+.page.active { display:block; }
+
+/* Bottom nav */
+nav { position:fixed; bottom:0; left:0; right:0; background:var(--surface); display:flex; border-top:1px solid #333; z-index:100; padding-bottom:env(safe-area-inset-bottom); }
+nav button { flex:1; padding:12px 8px; background:none; border:none; color:var(--text2); font-size:11px; display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer; }
+nav button.active { color:var(--accent); }
+nav button .icon { font-size:22px; }
+
+/* Header */
+h1 { font-size:22px; margin-bottom:16px; }
+h2 { font-size:17px; margin-bottom:12px; color:var(--text2); }
+
+/* Cards */
+.card { background:var(--surface); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+.card-title { font-size:15px; font-weight:600; margin-bottom:8px; }
+
+/* Inputs */
+input, select, textarea { width:100%; padding:12px; background:var(--surface2); border:1px solid #333; border-radius:8px; color:var(--text); font-size:16px; margin-bottom:8px; }
+input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+textarea { resize:vertical; min-height:60px; font-size:14px; }
+label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
+
+/* Buttons */
+.btn { display:inline-flex; align-items:center; justify-content:center; padding:12px 20px; border-radius:8px; border:none; font-size:15px; font-weight:600; cursor:pointer; width:100%; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-secondary { background:var(--surface2); color:var(--text); border:1px solid #444; }
+.btn-sm { padding:8px 12px; font-size:13px; width:auto; }
+.btn-danger { background:#dc2626; color:#fff; }
+.btn-icon { background:none; border:none; color:var(--text2); font-size:20px; cursor:pointer; padding:4px; width:auto; }
+
+/* Exercise list in setup */
+.exercise-item { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid #222; }
+.exercise-item:last-child { border-bottom:none; }
+.exercise-item .name { flex:1; font-size:15px; }
+.exercise-item .detail { font-size:12px; color:var(--text2); }
+.drag-handle { color:var(--text2); cursor:grab; font-size:18px; }
+
+/* Record page */
+.workout-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.exercise-record { background:var(--surface); border-radius:var(--radius); padding:16px; margin-bottom:12px; }
+.exercise-record .ex-name { font-size:16px; font-weight:600; margin-bottom:4px; }
+.exercise-record .ex-notes { font-size:12px; color:var(--text2); margin-bottom:12px; }
+.set-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+.set-row .set-num { width:32px; text-align:center; font-size:13px; color:var(--text2); flex-shrink:0; }
+.set-row input { width:80px; text-align:center; margin-bottom:0; padding:10px 8px; }
+.set-row .check { width:36px; height:36px; border-radius:50%; border:2px solid #444; background:none; color:var(--text2); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.set-row .check.done { border-color:var(--green); color:var(--green); background:rgba(74,222,128,0.1); }
+.add-set { background:none; border:1px dashed #444; color:var(--text2); padding:8px; border-radius:8px; width:100%; cursor:pointer; font-size:13px; }
+
+/* Previous data */
+.prev-data { font-size:12px; color:var(--text2); margin-bottom:8px; background:rgba(15,52,96,0.3); padding:8px; border-radius:6px; }
+.prev-data strong { color:var(--yellow); }
+
+/* Trends */
+.trend-exercise { margin-bottom:20px; }
+.trend-exercise .name { font-size:15px; font-weight:600; margin-bottom:8px; }
+.mini-chart { height:80px; display:flex; align-items:flex-end; gap:3px; padding:4px 0; }
+.mini-bar { flex:1; background:var(--accent); border-radius:3px 3px 0 0; min-width:8px; max-width:24px; position:relative; }
+.mini-bar .tip { position:absolute; top:-18px; left:50%; transform:translateX(-50%); font-size:9px; color:var(--text2); white-space:nowrap; }
+.trend-stats { display:flex; gap:16px; margin-top:8px; }
+.trend-stat { font-size:12px; color:var(--text2); }
+.trend-stat span { color:var(--text); font-weight:600; }
+
+/* Week selector */
+.week-selector { display:flex; gap:8px; margin-bottom:16px; overflow-x:auto; padding-bottom:4px; }
+.week-btn { padding:8px 16px; border-radius:20px; border:1px solid #333; background:none; color:var(--text2); font-size:13px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+.week-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* Modal */
+.modal-bg { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; align-items:flex-end; justify-content:center; }
+.modal-bg.show { display:flex; }
+.modal { background:var(--surface); border-radius:16px 16px 0 0; padding:24px 16px; width:100%; max-width:500px; max-height:85vh; overflow-y:auto; padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
+.modal h2 { margin-bottom:16px; }
+.modal-actions { display:flex; gap:8px; margin-top:16px; }
+.modal-actions .btn { flex:1; }
+
+/* Empty state */
+.empty { text-align:center; padding:40px 20px; color:var(--text2); }
+.empty .icon { font-size:48px; margin-bottom:12px; }
+.empty p { font-size:14px; }
+
+/* Swipe hint */
+.swipe-hint { text-align:center; font-size:12px; color:var(--text2); margin-top:8px; }
+
+/* Timer */
+.rest-timer { position:fixed; top:0; left:0; right:0; background:var(--accent); color:#fff; text-align:center; padding:8px; font-size:18px; font-weight:700; z-index:150; display:none; }
+.rest-timer.show { display:block; }
+</style>
+</head>
+<body>
+
+<div class="rest-timer" id="restTimer"></div>
+
+<!-- SETUP PAGE -->
+<div class="page active" id="pageSetup">
+  <h1>💪 Exercises</h1>
+  <div id="exerciseList"></div>
+  <button class="btn btn-primary" onclick="openAddExercise()" style="margin-top:12px">+ Add Exercise</button>
+  <div style="margin-top:12px">
+    <button class="btn btn-secondary" onclick="loadDefaults()">Load Steve's Program</button>
+  </div>
+</div>
+
+<!-- RECORD PAGE -->
+<div class="page" id="pageRecord">
+  <div class="workout-header">
+    <h1>🏋️ Record</h1>
+    <button class="btn btn-sm btn-secondary" onclick="finishWorkout()">Finish ✓</button>
+  </div>
+  <input type="date" id="workoutDate" onchange="loadWorkoutForDate()">
+  <div id="recordList"></div>
+</div>
+
+<!-- TRENDS PAGE -->
+<div class="page" id="pageTrends">
+  <h1>📈 Trends</h1>
+  <div id="trendsList"></div>
+</div>
+
+<!-- HISTORY PAGE -->
+<div class="page" id="pageHistory">
+  <h1>📋 History</h1>
+  <div id="historyList"></div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <button class="active" onclick="switchPage('Setup',this)"><span class="icon">⚙️</span>Setup</button>
+  <button onclick="switchPage('Record',this)"><span class="icon">🏋️</span>Record</button>
+  <button onclick="switchPage('Trends',this)"><span class="icon">📈</span>Trends</button>
+  <button onclick="switchPage('History',this)"><span class="icon">📋</span>History</button>
+</nav>
+
+<!-- ADD/EDIT EXERCISE MODAL -->
+<div class="modal-bg" id="exerciseModal">
+  <div class="modal">
+    <h2 id="modalTitle">Add Exercise</h2>
+    <label>Exercise Name</label>
+    <input id="exName" placeholder="e.g. Bench Press">
+    <label>Notes / Form Cues</label>
+    <textarea id="exNotes" placeholder="e.g. Keep shoulders back on the ball"></textarea>
+    <label>Default Sets</label>
+    <input id="exSets" type="number" value="4" min="1" max="10">
+    <label>Target Reps</label>
+    <input id="exReps" type="number" value="10" min="1" max="100">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('exerciseModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveExercise()">Save</button>
+    </div>
+    <div id="deleteExBtn" style="margin-top:12px;display:none">
+      <button class="btn btn-danger" onclick="deleteExercise()">Delete Exercise</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- DATA LAYER ---
+const DB = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem('wt_'+k)) || d; } catch { return d; } },
+  set(k, v) { localStorage.setItem('wt_'+k, JSON.stringify(v)); }
+};
+
+let exercises = DB.get('exercises', []);
+let workouts = DB.get('workouts', {}); // { "2025-06-30": { exerciseId: [{weight,reps,done}] } }
+let editingExId = null;
+
+// --- NAVIGATION ---
+function switchPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page'+name).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(name==='Record') initRecord();
+  if(name==='Trends') renderTrends();
+  if(name==='History') renderHistory();
+}
+
+// --- SETUP ---
+function renderExercises() {
+  const el = document.getElementById('exerciseList');
+  if(!exercises.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">🏋️</div><p>No exercises yet.<br>Add some or load the default program.</p></div>';
+    return;
+  }
+  el.innerHTML = exercises.map((ex,i) => `
+    <div class="card" onclick="openEditExercise('${ex.id}')" style="cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:start">
+        <div>
+          <div class="card-title">${ex.name}</div>
+          <div style="font-size:12px;color:var(--text2)">${ex.sets} sets × ${ex.reps} reps</div>
+          ${ex.notes ? `<div style="font-size:11px;color:var(--text2);margin-top:4px">${ex.notes.substring(0,60)}${ex.notes.length>60?'...':''}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px">
+          ${i>0 ? `<button class="btn-icon" onclick="event.stopPropagation();moveEx(${i},-1)">↑</button>` : ''}
+          ${i<exercises.length-1 ? `<button class="btn-icon" onclick="event.stopPropagation();moveEx(${i},1)">↓</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function moveEx(i, dir) {
+  const j = i+dir;
+  [exercises[i], exercises[j]] = [exercises[j], exercises[i]];
+  DB.set('exercises', exercises);
+  renderExercises();
+}
+
+function openAddExercise() {
+  editingExId = null;
+  document.getElementById('modalTitle').textContent = 'Add Exercise';
+  document.getElementById('exName').value = '';
+  document.getElementById('exNotes').value = '';
+  document.getElementById('exSets').value = '4';
+  document.getElementById('exReps').value = '10';
+  document.getElementById('deleteExBtn').style.display = 'none';
+  openModal('exerciseModal');
+}
+
+function openEditExercise(id) {
+  const ex = exercises.find(e => e.id === id);
+  if(!ex) return;
+  editingExId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Exercise';
+  document.getElementById('exName').value = ex.name;
+  document.getElementById('exNotes').value = ex.notes || '';
+  document.getElementById('exSets').value = ex.sets;
+  document.getElementById('exReps').value = ex.reps;
+  document.getElementById('deleteExBtn').style.display = 'block';
+  openModal('exerciseModal');
+}
+
+function saveExercise() {
+  const name = document.getElementById('exName').value.trim();
+  if(!name) return;
+  const data = {
+    name,
+    notes: document.getElementById('exNotes').value.trim(),
+    sets: parseInt(document.getElementById('exSets').value) || 4,
+    reps: parseInt(document.getElementById('exReps').value) || 10,
+  };
+  if(editingExId) {
+    const ex = exercises.find(e => e.id === editingExId);
+    Object.assign(ex, data);
+  } else {
+    exercises.push({ id: 'ex_'+Date.now(), ...data });
+  }
+  DB.set('exercises', exercises);
+  renderExercises();
+  closeModal('exerciseModal');
+}
+
+function deleteExercise() {
+  if(!editingExId || !confirm('Delete this exercise?')) return;
+  exercises = exercises.filter(e => e.id !== editingExId);
+  DB.set('exercises', exercises);
+  renderExercises();
+  closeModal('exerciseModal');
+}
+
+function loadDefaults() {
+  if(exercises.length && !confirm('This will replace your current exercises. Continue?')) return;
+  exercises = [
+    { id:'ex_1', name:'Bench Press', notes:'Keep hips up. Shoulders in middle of ball. Keep shoulders back on the ball. Remember triangle arms.', sets:4, reps:10 },
+    { id:'ex_2', name:'Single Arm Rows', notes:'Support leg bent. Slight dip in lower back. Shoulders both level with the floor. Head in line with your spine. Elbows by your side. Keep chest up.', sets:4, reps:10 },
+    { id:'ex_3', name:'Bench Press (Dumbbells)', notes:'Dumbbells and bench. Turn hands to 45 degrees. Chin down and chest up.', sets:4, reps:10 },
+    { id:'ex_4', name:'Chin Ups', notes:'Palms facing you. Bring chest to the bar.', sets:4, reps:10 },
+    { id:'ex_5', name:'Dumbbell Pullovers', notes:'Lay on ball so shoulders are in the middle. Extend arms over your head breathing in as you go down, breathe out on the way up.', sets:4, reps:10 },
+    { id:'ex_6', name:'Shoulder Press', notes:'Sitting up straight and tall. Start with weight on top of shoulders, hands turned to 45 degrees. Bring weight up and together. Draw belly button in and breathe out as you push up.', sets:4, reps:15 },
+    { id:'ex_7', name:'Bicep Curls', notes:'Sitting up straight and tall. Upper arms down by your side. Draw belly button in and breathe in as you lift weights up, breathe out as you lower.', sets:4, reps:15 },
+    { id:'ex_8', name:'Lying Tricep Extensions', notes:'Keep hips up. Shoulders in middle of ball. Keep shoulders back on the ball. Keep elbows pointed towards the ceiling and straighten arms as you breathe out.', sets:4, reps:15 },
+  ];
+  DB.set('exercises', exercises);
+  renderExercises();
+}
+
+// --- RECORD ---
+function initRecord() {
+  const dateInput = document.getElementById('workoutDate');
+  if(!dateInput.value) dateInput.value = new Date().toISOString().split('T')[0];
+  loadWorkoutForDate();
+}
+
+function loadWorkoutForDate() {
+  const date = document.getElementById('workoutDate').value;
+  const el = document.getElementById('recordList');
+  if(!exercises.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">⚙️</div><p>Set up your exercises first</p></div>';
+    return;
+  }
+  const dayData = workouts[date] || {};
+  
+  el.innerHTML = exercises.map(ex => {
+    const sets = dayData[ex.id] || Array.from({length:ex.sets}, ()=>({weight:'',reps:'',done:false}));
+    const prev = getPreviousWorkout(ex.id, date);
+    
+    return `
+    <div class="exercise-record">
+      <div class="ex-name">${ex.name}</div>
+      ${ex.notes ? `<div class="ex-notes">${ex.notes}</div>` : ''}
+      ${prev ? `<div class="prev-data">Last: <strong>${prev.date}</strong> — ${prev.summary}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-bottom:6px;padding-left:32px">
+        <div style="width:80px;text-align:center;font-size:11px;color:var(--text2)">Weight</div>
+        <div style="width:80px;text-align:center;font-size:11px;color:var(--text2)">Reps</div>
+        <div style="width:36px"></div>
+      </div>
+      ${sets.map((s,i) => `
+        <div class="set-row">
+          <div class="set-num">${i+1}</div>
+          <input type="number" inputmode="decimal" placeholder="${prev?prev.sets[0]?.weight||'kg':'kg'}" value="${s.weight}" onchange="updateSet('${date}','${ex.id}',${i},'weight',this.value)">
+          <input type="number" inputmode="numeric" placeholder="${ex.reps}" value="${s.reps}" onchange="updateSet('${date}','${ex.id}',${i},'reps',this.value)">
+          <button class="check ${s.done?'done':''}" onclick="toggleSet('${date}','${ex.id}',${i},this)">✓</button>
+        </div>
+      `).join('')}
+      <button class="add-set" onclick="addSet('${date}','${ex.id}')">+ Add Set</button>
+    </div>`;
+  }).join('');
+}
+
+function updateSet(date, exId, setIdx, field, value) {
+  if(!workouts[date]) workouts[date] = {};
+  if(!workouts[date][exId]) {
+    const ex = exercises.find(e=>e.id===exId);
+    workouts[date][exId] = Array.from({length:ex.sets}, ()=>({weight:'',reps:'',done:false}));
+  }
+  workouts[date][exId][setIdx][field] = value;
+  DB.set('workouts', workouts);
+}
+
+function toggleSet(date, exId, setIdx, btn) {
+  if(!workouts[date]) workouts[date] = {};
+  if(!workouts[date][exId]) {
+    const ex = exercises.find(e=>e.id===exId);
+    workouts[date][exId] = Array.from({length:ex.sets}, ()=>({weight:'',reps:'',done:false}));
+  }
+  const set = workouts[date][exId][setIdx];
+  set.done = !set.done;
+  btn.classList.toggle('done');
+  DB.set('workouts', workouts);
+  
+  // Start rest timer on check
+  if(set.done) startRestTimer(90);
+}
+
+function addSet(date, exId) {
+  if(!workouts[date]) workouts[date] = {};
+  if(!workouts[date][exId]) {
+    const ex = exercises.find(e=>e.id===exId);
+    workouts[date][exId] = Array.from({length:ex.sets}, ()=>({weight:'',reps:'',done:false}));
+  }
+  workouts[date][exId].push({weight:'',reps:'',done:false});
+  DB.set('workouts', workouts);
+  loadWorkoutForDate();
+}
+
+function getPreviousWorkout(exId, beforeDate) {
+  const dates = Object.keys(workouts).filter(d => d < beforeDate).sort().reverse();
+  for(const d of dates) {
+    if(workouts[d][exId]) {
+      const sets = workouts[d][exId].filter(s => s.weight || s.reps);
+      if(sets.length) {
+        return {
+          date: formatDate(d),
+          sets,
+          summary: sets.map(s => `${s.weight}kg×${s.reps}`).join(', ')
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function finishWorkout() {
+  const date = document.getElementById('workoutDate').value;
+  const dayData = workouts[date];
+  if(!dayData) { alert('Nothing recorded yet!'); return; }
+  const count = Object.values(dayData).flat().filter(s=>s.done).length;
+  alert(`💪 Workout saved!\n${count} sets completed.`);
+}
+
+// --- REST TIMER ---
+let restInterval = null;
+function startRestTimer(secs) {
+  clearInterval(restInterval);
+  const el = document.getElementById('restTimer');
+  let remaining = secs;
+  el.classList.add('show');
+  el.textContent = `Rest: ${remaining}s`;
+  el.onclick = () => { clearInterval(restInterval); el.classList.remove('show'); };
+  restInterval = setInterval(() => {
+    remaining--;
+    if(remaining <= 0) {
+      clearInterval(restInterval);
+      el.textContent = '⏰ Go!';
+      if(navigator.vibrate) navigator.vibrate(200);
+      setTimeout(() => el.classList.remove('show'), 2000);
+    } else {
+      el.textContent = `Rest: ${remaining}s  (tap to dismiss)`;
+    }
+  }, 1000);
+}
+
+// --- TRENDS ---
+function renderTrends() {
+  const el = document.getElementById('trendsList');
+  if(!exercises.length) { el.innerHTML = '<div class="empty"><p>No exercises set up</p></div>'; return; }
+  
+  const dates = Object.keys(workouts).sort();
+  if(!dates.length) { el.innerHTML = '<div class="empty"><div class="icon">📈</div><p>Complete some workouts to see trends</p></div>'; return; }
+  
+  el.innerHTML = exercises.map(ex => {
+    const dataPoints = [];
+    for(const d of dates) {
+      if(workouts[d][ex.id]) {
+        const sets = workouts[d][ex.id].filter(s => s.weight && s.done);
+        if(sets.length) {
+          const maxWeight = Math.max(...sets.map(s => parseFloat(s.weight) || 0));
+          const totalVol = sets.reduce((sum,s) => sum + (parseFloat(s.weight)||0) * (parseInt(s.reps)||0), 0);
+          dataPoints.push({ date:d, maxWeight, totalVol, sets: sets.length });
+        }
+      }
+    }
+    if(!dataPoints.length) return '';
+    
+    const maxVol = Math.max(...dataPoints.map(p=>p.totalVol));
+    const firstWeight = dataPoints[0].maxWeight;
+    const lastWeight = dataPoints[dataPoints.length-1].maxWeight;
+    const change = lastWeight - firstWeight;
+    
+    return `
+    <div class="trend-exercise card">
+      <div class="name">${ex.name}</div>
+      <div class="mini-chart">
+        ${dataPoints.slice(-12).map(p => `
+          <div class="mini-bar" style="height:${Math.max(8, (p.totalVol/maxVol)*100)}%">
+            <div class="tip">${p.maxWeight}</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="trend-stats">
+        <div class="trend-stat">Current: <span>${lastWeight}kg</span></div>
+        <div class="trend-stat">Change: <span style="color:${change>=0?'var(--green)':'var(--accent)'}">${change>=0?'+':''}${change}kg</span></div>
+        <div class="trend-stat">Sessions: <span>${dataPoints.length}</span></div>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty"><p>No completed sets with weights yet</p></div>';
+}
+
+// --- HISTORY ---
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  const dates = Object.keys(workouts).sort().reverse();
+  if(!dates.length) { el.innerHTML = '<div class="empty"><div class="icon">📋</div><p>No workouts recorded yet</p></div>'; return; }
+  
+  el.innerHTML = dates.map(d => {
+    const dayData = workouts[d];
+    const completedSets = Object.values(dayData).flat().filter(s=>s.done).length;
+    const totalSets = Object.values(dayData).flat().length;
+    const exCount = Object.keys(dayData).length;
+    
+    return `
+    <div class="card" onclick="viewHistoryDate('${d}')" style="cursor:pointer">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="card-title">${formatDate(d)}</div>
+          <div style="font-size:12px;color:var(--text2)">${exCount} exercises · ${completedSets}/${totalSets} sets</div>
+        </div>
+        <div style="font-size:13px;color:${completedSets===totalSets?'var(--green)':'var(--yellow)'}">
+          ${completedSets===totalSets?'✓ Complete':'In progress'}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function viewHistoryDate(date) {
+  document.getElementById('workoutDate').value = date;
+  switchPage('Record', document.querySelectorAll('nav button')[1]);
+}
+
+// --- UTILS ---
+function formatDate(d) {
+  const [y,m,day] = d.split('-');
+  return `${parseInt(day)}/${parseInt(m)}`;
+}
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// Click outside modal to close
+document.querySelectorAll('.modal-bg').forEach(bg => {
+  bg.addEventListener('click', e => { if(e.target === bg) bg.classList.remove('show'); });
+});
+
+// Init
+renderExercises();
+</script>
+</body>
+</html>
