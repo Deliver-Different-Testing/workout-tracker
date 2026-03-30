@@ -607,13 +607,11 @@ function loadDefaults() {
     {id:'ex_8',name:'Lying Tricep Extensions',notes:'Hips up. Shoulders on ball. Elbows at ceiling, straighten arms breathing out.',sets:2,reps:15},
   ];
   programs=[
-    {id:'wk_upper_a', name:'Upper Body A', exerciseIds:['ex_1','ex_2','ex_5','ex_6']},
-    {id:'wk_upper_b', name:'Upper Body B', exerciseIds:['ex_3','ex_4','ex_7','ex_8']},
-    {id:'wk_legs', name:'Legs', exerciseIds:[]},
+    {id:'wk_upper_a', name:'Upper Body A', exerciseIds:['ex_1','ex_2','ex_3','ex_4','ex_5','ex_6','ex_7','ex_8']},
   ];
   DB.set('exercises',exercises); DB.set('programs',programs);
   renderExercises(); renderWorkoutList();
-  alert("✅ Loaded! I've split your exercises across Upper Body A & B. Edit the workouts to assign exercises how you like, and add your leg exercises.");
+  alert("✅ Loaded! All 8 exercises under Upper Body A. Upload your other workout photos and I'll add Upper Body B and Legs.");
 }
 
 // --- RECORD ---
