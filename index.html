@@ -863,12 +863,12 @@ async function renderOuraHome() {
   el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:8px">Loading Oura data...</div>';
   
   const t = today();
-  const yesterday = new Date(new Date().setDate(new Date().getDate()-1)).toISOString().split('T')[0];
+  const weekAgo = new Date(new Date().setDate(new Date().getDate()-7)).toISOString().split('T')[0];
   
   const [sleepData, readinessData, activityData] = await Promise.all([
-    fetchOura(`/v2/usercollection/daily_sleep?start_date=${yesterday}&end_date=${t}`),
-    fetchOura(`/v2/usercollection/daily_readiness?start_date=${yesterday}&end_date=${t}`),
-    fetchOura(`/v2/usercollection/daily_activity?start_date=${yesterday}&end_date=${t}`)
+    fetchOura(`/v2/usercollection/daily_sleep?start_date=${weekAgo}&end_date=${t}`),
+    fetchOura(`/v2/usercollection/daily_readiness?start_date=${weekAgo}&end_date=${t}`),
+    fetchOura(`/v2/usercollection/daily_activity?start_date=${weekAgo}&end_date=${t}`)
   ]);
   
   const sleep = sleepData?.data?.slice(-1)[0];
@@ -889,7 +889,8 @@ async function renderOuraHome() {
     </div>`;
   };
   
-  let html = '<h2>⌚ Oura Ring</h2><div class="metric-grid">';
+  const latestDay = sleep?.day || readiness?.day || '';
+  let html = `<h2>⌚ Oura Ring ${latestDay ? '<span style="font-size:13px;color:var(--text2)">(' + formatDate(latestDay) + ')</span>' : ''}</h2><div class="metric-grid">`;
   html += scoreRing(sleep?.score, 'Sleep', '😴');
   html += scoreRing(readiness?.score, 'Readiness', '⚡');
   
