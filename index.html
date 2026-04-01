@@ -128,7 +128,11 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
 <div class="page active" id="pageHome">
   <h1>💪 Workout Tracker</h1>
   <div id="weekStreak"></div>
+  <div id="dailyStatsCard"></div>
   <div id="latestMetrics"></div>
+  <div style="margin-bottom:12px">
+    <button class="btn btn-secondary" id="gfitSyncBtn" onclick="syncGoogleFit()">🔄 Sync Google Fit</button>
+  </div>
   <h2>Log Activity</h2>
   <div class="activity-pills" id="todayActivities">
     <button class="activity-pill pilates" onclick="logActivity('pilates')">🧘 Pilates</button>
@@ -182,11 +186,13 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     <button class="tab" onclick="showTrendTab('body',this)">Body</button>
     <button class="tab" onclick="showTrendTab('activity',this)">Activity</button>
     <button class="tab" onclick="showTrendTab('oura',this)">Oura</button>
+    <button class="tab" onclick="showTrendTab('daily',this)">Daily</button>
   </div>
   <div id="trendsWeights"></div>
   <div id="trendsBody" style="display:none"></div>
   <div id="trendsActivity" style="display:none"></div>
   <div id="trendsOura" style="display:none"></div>
+  <div id="trendsDaily" style="display:none"></div>
 </div>
 
 <!-- SETUP PAGE -->
@@ -331,6 +337,7 @@ async function renderHome() {
     ]);
     
     renderWeekStreak(workoutsData, activitiesData);
+    renderDailyStatsCard();
     renderLatestMetrics(bodyMetricsData);
     renderOuraHome();
     renderHomeWorkouts();
@@ -389,7 +396,17 @@ function renderWeekStreak(workoutsData, activitiesData) {
       </div>
     </div>`;
   }
-  el.innerHTML = html + '</div>';
+  html += '</div>';
+  // Show selected day's quick stats if available
+  const cached = dailyStatsCache[selected];
+  if(cached && (cached.steps || cached.calories_burned || cached.sleep_hours)) {
+    html += `<div style="display:flex;gap:12px;justify-content:center;font-size:12px;color:var(--text2);margin-bottom:8px">
+      ${cached.steps ? `<span>👟 ${cached.steps.toLocaleString()}</span>` : ''}
+      ${cached.calories_burned ? `<span>🔥 ${cached.calories_burned}</span>` : ''}
+      ${cached.sleep_hours ? `<span>😴 ${cached.sleep_hours}h</span>` : ''}
+    </div>`;
+  }
+  el.innerHTML = html;
 }
 
 function renderLatestMetrics(bodyMetricsData) {
@@ -877,7 +894,7 @@ function startRestTimer(secs) {
 
 // --- TRENDS ---
 function showTrendTab(tab, btn) {
-  ['weights','body','activity','oura'].forEach(t=>{
+  ['weights','body','activity','oura','daily'].forEach(t=>{
     const el=document.getElementById('trends'+t.charAt(0).toUpperCase()+t.slice(1));
     if(el) el.style.display=t===tab?'block':'none';
   });
@@ -893,6 +910,7 @@ async function renderTrends() {
   renderBodyTrends(bodyMetricsData);
   renderActivityTrends(workoutsData, activitiesData);
   renderOuraTrends();
+  renderDailyTrends();
 }
 
 function renderWeightTrends(workoutsData) {
@@ -1102,6 +1120,117 @@ async function renderOuraTrends() {
   }
   
   el.innerHTML = html;
+}
+
+// --- DAILY STATS (Google Fit) ---
+let dailyStatsCache = {};
+
+async function fetchDailyStats(date) {
+  try {
+    const data = await apiFetch('GET', `/daily-stats/${date}`);
+    if(data) dailyStatsCache[date] = data;
+    return data;
+  } catch(e) { return null; }
+}
+
+async function fetchAllDailyStats() {
+  try {
+    const data = await apiFetch('GET', '/daily-stats');
+    if(Array.isArray(data)) data.forEach(d => dailyStatsCache[d.date] = d);
+    return data || [];
+  } catch(e) { return []; }
+}
+
+async function renderDailyStatsCard() {
+  const el = document.getElementById('dailyStatsCard');
+  const d = homeDate();
+  const stats = await fetchDailyStats(d);
+  if(!stats || (!stats.steps && !stats.calories_burned && !stats.active_minutes && !stats.resting_hr && !stats.sleep_hours)) {
+    el.innerHTML = '';
+    return;
+  }
+  const stepPct = Math.min(100, Math.round((stats.steps || 0) / 10000 * 100));
+  const stepColor = stepPct >= 100 ? 'var(--green)' : stepPct >= 60 ? 'var(--yellow)' : 'var(--accent)';
+  el.innerHTML = `<div class="card">
+    <div class="card-title">📊 ${d === today() ? "Today's Stats" : formatDate(d) + ' Stats'}</div>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="value" style="font-size:20px">${(stats.steps||0).toLocaleString()}</div>
+        <div class="label">👟 Steps</div>
+        <div style="margin-top:6px;height:6px;background:#333;border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${stepPct}%;background:${stepColor};border-radius:3px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">${stepPct}% of 10k</div>
+      </div>
+      <div class="metric-card">
+        <div class="value" style="font-size:20px">${stats.calories_burned||'—'}</div>
+        <div class="label">🔥 Calories</div>
+      </div>
+      <div class="metric-card">
+        <div class="value" style="font-size:20px">${stats.active_minutes||'—'}</div>
+        <div class="label">⏱️ Active Min</div>
+      </div>
+      <div class="metric-card">
+        <div class="value" style="font-size:20px">${stats.resting_hr||'—'}</div>
+        <div class="label">❤️ Resting HR</div>
+      </div>
+      ${stats.sleep_hours ? `<div class="metric-card" style="grid-column:span 2">
+        <div class="value" style="font-size:20px">${stats.sleep_hours}h</div>
+        <div class="label">😴 Sleep</div>
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+
+async function syncGoogleFit() {
+  const btn = document.getElementById('gfitSyncBtn');
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Syncing...';
+  btn.disabled = true;
+  try {
+    await Promise.all([
+      apiFetch('POST', '/gfit/sync?days=7'),
+      apiFetch('POST', '/gfit/sync-daily?days=7')
+    ]);
+    btn.textContent = '✅ Synced!';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+    renderHome();
+  } catch(e) {
+    btn.textContent = '❌ Failed';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+    console.error('Google Fit sync failed:', e);
+  }
+}
+
+async function renderDailyTrends() {
+  const el = document.getElementById('trendsDaily');
+  if(!el) return;
+  el.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:13px;padding:16px">Loading daily stats...</div>';
+  const allStats = await fetchAllDailyStats();
+  if(!allStats.length) { el.innerHTML = '<div class="empty"><p>No daily stats yet. Sync Google Fit first!</p></div>'; return; }
+  const sorted = allStats.sort((a,b) => a.date.localeCompare(b.date)).slice(-30);
+  
+  const renderChart = (title, emoji, key, color, unit='') => {
+    const pts = sorted.filter(s => s[key] != null && s[key] > 0);
+    if(!pts.length) return '';
+    const vals = pts.map(p => p[key]);
+    const max = Math.max(...vals), min = Math.min(...vals), range = max - min || 1;
+    const avg = Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+    return `<div class="card"><div class="card-title">${emoji} ${title} (30 days)</div>
+      <div class="mini-chart">${pts.map(p=>{
+        const h = Math.max(8, ((p[key]-min)/range)*100);
+        return `<div class="mini-bar" style="height:${h}%;background:${color}"><div class="tip">${p[key]}</div></div>`;
+      }).join('')}</div>
+      <div class="trend-stats">
+        <div class="trend-stat">Average: <span>${avg}${unit}</span></div>
+        <div class="trend-stat">Latest: <span>${vals[vals.length-1]}${unit}</span></div>
+      </div></div>`;
+  };
+  
+  el.innerHTML = renderChart('Steps','👟','steps','var(--blue)') +
+    renderChart('Sleep','😴','sleep_hours','var(--purple)','h') +
+    renderChart('Resting HR','❤️','resting_hr','var(--accent)','bpm') +
+    renderChart('Calories','🔥','calories_burned','var(--yellow)');
 }
 
 // --- UTILS ---
