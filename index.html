@@ -295,8 +295,10 @@ async function apiFetch(method, endpoint, data) {
 let exercises = [];
 let programs = [];
 let activeProgram = null;
+let selectedHomeDate = null; // null = today
 
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+const homeDate = () => selectedHomeDate || today();
 
 // --- NAVIGATION ---
 async function switchPage(name, idx) {
@@ -351,6 +353,14 @@ function renderHomeWorkouts() {
 function startWorkout(programId) {
   activeProgram = programId;
   switchPage('Record', 1);
+  // Set Record page date to selected home date
+  document.getElementById('workoutDate').value = homeDate();
+  loadWorkoutForDate();
+}
+
+function selectHomeDay(ds) {
+  selectedHomeDate = ds;
+  renderHome();
 }
 
 function renderWeekStreak(workoutsData, activitiesData) {
@@ -360,6 +370,7 @@ function renderWeekStreak(workoutsData, activitiesData) {
   const monday = new Date(now);
   monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
   const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const selected = homeDate();
   let html = '<div class="week-view">';
   for(let i=0; i<7; i++) {
     const d = new Date(monday); d.setDate(monday.getDate()+i);
@@ -367,7 +378,9 @@ function renderWeekStreak(workoutsData, activitiesData) {
     const dayActs = activitiesData.filter(a => a.date === ds);
     const hasGymWorkout = workoutsData[ds] && workoutsData[ds].exercises && Object.keys(workoutsData[ds].exercises).length > 0;
     const isToday = ds === today();
-    html += `<div class="week-day" style="${isToday?'border:1px solid var(--accent)':''}">
+    const isSelected = ds === selected;
+    const border = isSelected ? 'border:2px solid var(--accent);background:rgba(255,107,107,0.15)' : isToday ? 'border:1px solid var(--accent)' : '';
+    html += `<div class="week-day" style="${border};cursor:pointer" onclick="selectHomeDay('${ds}')">
       <div class="day-label">${days[i]}</div>
       <div class="day-dots">
         ${hasGymWorkout ? '<div class="dot dot-gym"></div>' : ''}
@@ -399,7 +412,7 @@ function renderLatestMetrics(bodyMetricsData) {
 }
 
 function highlightTodayActivities(activitiesData, workoutsData) {
-  const t = today();
+  const t = homeDate();
   document.querySelectorAll('#todayActivities .activity-pill').forEach(btn => {
     const type = btn.textContent.includes('Pilates')?'pilates':'walk';
     btn.classList.toggle('active', activitiesData.some(a=>a.date===t&&a.type===type));
@@ -408,11 +421,12 @@ function highlightTodayActivities(activitiesData, workoutsData) {
 
 function renderTodayLog(workoutsData, activitiesData) {
   const el = document.getElementById('todayLog');
-  const t = today();
+  const t = homeDate();
+  const isToday = t === today();
   const todayActs = activitiesData.filter(a=>a.date===t);
   const wk = workoutsData[t];
   const hasGym = wk && wk.exercises && Object.keys(wk.exercises).length > 0;
-  if(!todayActs.length && !hasGym) { el.innerHTML='<div style="font-size:13px;color:var(--text2);text-align:center;padding:12px">No activity logged today</div>'; return; }
+  if(!todayActs.length && !hasGym) { el.innerHTML=`<div style="font-size:13px;color:var(--text2);text-align:center;padding:12px">No activity logged ${isToday?'today':'for '+formatDate(t)}</div>`; return; }
   let html = '';
   if(hasGym) {
     const prog = programs.find(p=>p.id===wk.programId);
@@ -430,7 +444,7 @@ function renderTodayLog(workoutsData, activitiesData) {
 async function logActivity(type) {
   pendingActivityType = type;
   document.getElementById('activityModalTitle').textContent = type==='pilates'?'🧘 Log Pilates':'🐕 Log Dog Walk';
-  document.getElementById('actDate').value = today();
+  document.getElementById('actDate').value = homeDate();
   document.getElementById('actDuration').value = type==='pilates'?'50':'30';
   document.getElementById('actNotes').value = '';
   openModal('activityModal');
