@@ -296,7 +296,7 @@ let exercises = [];
 let programs = [];
 let activeProgram = null;
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 
 // --- NAVIGATION ---
 async function switchPage(name, idx) {
@@ -359,7 +359,7 @@ function renderWeekStreak(workoutsData, activitiesData) {
   let html = '<div class="week-view">';
   for(let i=0; i<7; i++) {
     const d = new Date(monday); d.setDate(monday.getDate()+i);
-    const ds = d.toISOString().split('T')[0];
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const dayActs = activitiesData.filter(a => a.date === ds);
     const hasGymWorkout = workoutsData[ds] && workoutsData[ds].exercises && Object.keys(workoutsData[ds].exercises).length > 0;
     const isToday = ds === today();
