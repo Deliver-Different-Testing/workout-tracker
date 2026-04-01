@@ -320,17 +320,21 @@ async function fetchAllSetupData() {
 
 // --- HOME ---
 async function renderHome() {
-  await fetchAllSetupData();
-  const workoutsData = await apiFetch('GET', '/workouts');
-  const activitiesData = await apiFetch('GET', '/activities');
-  const bodyMetricsData = await apiFetch('GET', '/body-metrics');
-  
-  renderWeekStreak(workoutsData, activitiesData);
-  renderLatestMetrics(bodyMetricsData);
-  renderOuraHome(); // Oura pulls its own data
-  renderHomeWorkouts();
-  renderTodayLog(workoutsData, activitiesData);
-  highlightTodayActivities(activitiesData, workoutsData);
+  try {
+    await fetchAllSetupData();
+    const [workoutsData, activitiesData, bodyMetricsData] = await Promise.all([
+      apiFetch('GET', '/workouts').catch(()=>({})),
+      apiFetch('GET', '/activities').catch(()=>[]),
+      apiFetch('GET', '/body-metrics').catch(()=>[])
+    ]);
+    
+    renderWeekStreak(workoutsData, activitiesData);
+    renderLatestMetrics(bodyMetricsData);
+    renderOuraHome();
+    renderHomeWorkouts();
+    renderTodayLog(workoutsData, activitiesData);
+    highlightTodayActivities(activitiesData, workoutsData);
+  } catch(e) { console.error('renderHome failed:', e); }
 }
 
 function renderHomeWorkouts() {
@@ -388,9 +392,9 @@ function renderLatestMetrics(bodyMetricsData) {
   };
   el.innerHTML = `<div class="metric-grid">
     ${latest.weight?`<div class="metric-card"><div class="value">${latest.weight}</div><div class="label">Weight (kg)</div>${ch(latest.weight,prev?.weight,'kg',true)}</div>`:''}
-    ${latest.fat?`<div class="metric-card"><div class="value">${latest.fat}%</div><div class="label">Body Fat</div>${ch(latest.fat,prev?.fat,'%',true)}</div>`:''}
-    ${latest.visceral?`<div class="metric-card"><div class="value">${latest.visceral}</div><div class="label">Visceral Fat</div>${ch(latest.visceral,prev?.visceral,'',true)}</div>`:''}
-    ${latest.muscle?`<div class="metric-card"><div class="value">${latest.muscle}</div><div class="label">Muscle (kg)</div>${ch(latest.muscle,prev?.muscle,'kg',false)}</div>`:''}
+    ${latest.body_fat?`<div class="metric-card"><div class="value">${latest.body_fat}%</div><div class="label">Body Fat</div>${ch(latest.body_fat,prev?.body_fat,'%',true)}</div>`:''}
+    ${latest.visceral_fat?`<div class="metric-card"><div class="value">${latest.visceral_fat}</div><div class="label">Visceral Fat</div>${ch(latest.visceral_fat,prev?.visceral_fat,'',true)}</div>`:''}
+    ${latest.muscle_mass?`<div class="metric-card"><div class="value">${latest.muscle_mass}</div><div class="label">Muscle (kg)</div>${ch(latest.muscle_mass,prev?.muscle_mass,'kg',false)}</div>`:''}
   </div>`;
 }
 
