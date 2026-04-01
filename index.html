@@ -994,10 +994,10 @@ async function renderOuraHome() {
   html += scoreRing(sleep?.score, 'Sleep', '😴');
   html += scoreRing(readiness?.score, 'Readiness', '⚡');
   
-  if(readiness?.contributors) {
-    const c = readiness.contributors;
-    html += `<div class="metric-card"><div class="value">${c.resting_heart_rate || '—'}</div><div class="label">❤️ Resting HR</div></div>`;
-    html += `<div class="metric-card"><div class="value">${c.hrv_balance || '—'}</div><div class="label">📊 HRV Balance</div></div>`;
+  // Get actual HR and HRV from sleep data
+  if(sleep) {
+    html += `<div class="metric-card"><div class="value">${sleep.lowest_heart_rate || '—'}</div><div class="label">❤️ Resting HR</div></div>`;
+    html += `<div class="metric-card"><div class="value">${sleep.average_hrv || '—'}</div><div class="label">📊 HRV</div></div>`;
   }
   html += '</div>';
   
