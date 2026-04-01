@@ -264,6 +264,8 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
 <div class="modal-bg" id="activityModal">
   <div class="modal">
     <h2 id="activityModalTitle">Log Activity</h2>
+    <label>Date</label>
+    <input type="date" id="actDate">
     <label>Duration (minutes)</label>
     <input type="number" id="actDuration" inputmode="numeric" placeholder="45">
     <label>Notes (optional)</label>
@@ -424,12 +426,13 @@ function renderTodayLog(workoutsData, activitiesData) {
 async function logActivity(type) {
   pendingActivityType = type;
   document.getElementById('activityModalTitle').textContent = type==='pilates'?'🧘 Log Pilates':'🐕 Log Dog Walk';
+  document.getElementById('actDate').value = today();
   document.getElementById('actDuration').value = type==='pilates'?'50':'30';
   document.getElementById('actNotes').value = '';
   openModal('activityModal');
 }
 async function saveActivity() {
-  await apiFetch('POST', '/activities', { date:today(), type:pendingActivityType, duration:parseInt(document.getElementById('actDuration').value)||0, notes:document.getElementById('actNotes').value.trim() });
+  await apiFetch('POST', '/activities', { date:document.getElementById('actDate').value||today(), type:pendingActivityType, duration:parseInt(document.getElementById('actDuration').value)||0, notes:document.getElementById('actNotes').value.trim() });
   closeModal('activityModal'); renderHome();
 }
 
