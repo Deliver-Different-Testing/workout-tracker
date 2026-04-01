@@ -671,7 +671,7 @@ async function loadWorkoutForDate() {
   const workoutsForDate = await apiFetch('GET', `/workouts?date=${date}`);
   const dayData = workoutsForDate[date]?.exercises || {};
   
-  el.innerHTML=await Promise.all(progExercises.map(async ex => {
+  const cards = await Promise.all(progExercises.map(async ex => {
     const sets=dayData[ex.id]||Array.from({length:ex.sets},()=>({weight:'',reps:'',done:false}));
     const prev=await getPreviousWorkout(ex.id,date);
     return `
@@ -694,7 +694,8 @@ async function loadWorkoutForDate() {
       `).join('')}
       <button class="btn-ghost" onclick="addSet('${date}','${ex.id}')">+ Add Set</button>
     </div>`;
-  }).join(''));
+  }));
+  el.innerHTML = cards.join('');
 }
 
 async function updateSet(date,exId,i,field,val) {
