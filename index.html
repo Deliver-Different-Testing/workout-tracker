@@ -431,11 +431,18 @@ function renderTodayLog(workoutsData, activitiesData) {
   if(hasGym) {
     const prog = programs.find(p=>p.id===wk.programId);
     const sets = Object.values(wk.exercises).flat().filter(s=>s.done).length;
-    html += `<div class="card" onclick="activeProgram='${wk.programId}';switchPage('Record',1)" style="cursor:pointer"><div style="display:flex;justify-content:space-between"><span>🏋️ ${prog?prog.name:'Workout'}</span><span style="color:var(--green)">${sets} sets ✓</span></div></div>`;
+    html += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
+      <span onclick="activeProgram='${wk.programId}';switchPage('Record',1)" style="cursor:pointer;flex:1">🏋️ ${prog?prog.name:'Workout'} <span style="color:var(--green)">${sets} sets ✓</span></span>
+      <button class="btn-icon" onclick="deleteWorkoutDay('${t}')" title="Delete">🗑</button>
+    </div></div>`;
   }
   todayActs.forEach(a => {
     const icon = a.type==='pilates'?'🧘':'🐕';
-    html += `<div class="card"><div style="display:flex;justify-content:space-between"><span>${icon} ${a.type.charAt(0).toUpperCase()+a.type.slice(1)}</span><span style="color:var(--text2)">${a.duration?a.duration+'min':''}</span></div>${a.notes?`<div style="font-size:12px;color:var(--text2);margin-top:4px">${a.notes}</div>`:''}</div>`;
+    html += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1"><span>${icon} ${a.type.charAt(0).toUpperCase()+a.type.slice(1)}</span> <span style="color:var(--text2)">${a.duration?a.duration+'min':''}</span>
+      ${a.notes?`<div style="font-size:12px;color:var(--text2);margin-top:4px">${a.notes}</div>`:''}</div>
+      <button class="btn-icon" onclick="deleteActivity(${a.id})" title="Delete">🗑</button>
+    </div></div>`;
   });
   el.innerHTML = html;
 }
@@ -449,6 +456,18 @@ async function logActivity(type) {
   document.getElementById('actNotes').value = '';
   openModal('activityModal');
 }
+async function deleteActivity(id) {
+  if(!confirm('Delete this activity?')) return;
+  await apiFetch('DELETE', `/activities/${id}`);
+  renderHome();
+}
+
+async function deleteWorkoutDay(date) {
+  if(!confirm('Delete this workout?')) return;
+  await apiFetch('POST', '/workouts', {date, programId: '', exercises: {}});
+  renderHome();
+}
+
 async function saveActivity() {
   await apiFetch('POST', '/activities', { date:document.getElementById('actDate').value||today(), type:pendingActivityType, duration:parseInt(document.getElementById('actDuration').value)||0, notes:document.getElementById('actNotes').value.trim() });
   closeModal('activityModal'); renderHome();
