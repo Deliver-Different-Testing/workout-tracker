@@ -698,11 +698,17 @@ async function loadWorkoutForDate() {
   el.innerHTML = cards.join('');
 }
 
+function ensureSets(arr, minLen) {
+  while(arr.length <= minLen) arr.push({weight:'',reps:'',done:false});
+  return arr;
+}
+
 async function updateSet(date,exId,i,field,val) {
   const ex = exercises.find(e=>e.id===exId);
   let workoutsForDate = await apiFetch('GET', `/workouts?date=${date}`);
   if(!workoutsForDate[date]) workoutsForDate[date] = { programId: activeProgram, exercises: {} };
   if(!workoutsForDate[date].exercises[exId]) workoutsForDate[date].exercises[exId] = Array.from({length:ex?.sets||2},()=>({weight:'',reps:'',done:false}));
+  ensureSets(workoutsForDate[date].exercises[exId], i);
   workoutsForDate[date].exercises[exId][i][field]=val;
   await apiFetch('POST', '/workouts', {date, programId: activeProgram, exercises: workoutsForDate[date].exercises});
 }
@@ -712,6 +718,7 @@ async function toggleSet(date,exId,i,btn) {
   let workoutsForDate = await apiFetch('GET', `/workouts?date=${date}`);
   if(!workoutsForDate[date]) workoutsForDate[date] = { programId: activeProgram, exercises: {} };
   if(!workoutsForDate[date].exercises[exId]) workoutsForDate[date].exercises[exId] = Array.from({length:ex?.sets||2},()=>({weight:'',reps:'',done:false}));
+  ensureSets(workoutsForDate[date].exercises[exId], i);
   
   const s=workoutsForDate[date].exercises[exId][i]; s.done=!s.done;
   btn.classList.toggle('done'); 
