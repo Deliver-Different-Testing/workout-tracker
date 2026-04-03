@@ -582,20 +582,66 @@ async function openEditWorkout(id) {
   openModal('workoutModal');
 }
 
+let wkOrderedIds = []; // tracks the ordered selected exercise IDs
+
 function renderWkExerciseChecklist(selectedIds) {
   const el=document.getElementById('wkExerciseList');
   if(!exercises.length) { el.innerHTML='<div style="font-size:13px;color:var(--text2)">Add exercises first</div>'; return; }
-  el.innerHTML=exercises.map(ex=>`
-    <div class="check-item">
-      <input type="checkbox" id="wkex_${ex.id}" value="${ex.id}" ${selectedIds.includes(ex.id)?'checked':''}>
-      <label for="wkex_${ex.id}">${ex.name}</label>
-    </div>
-  `).join('');
+  wkOrderedIds = [...selectedIds];
+  renderWkExerciseListInner();
+}
+
+function renderWkExerciseListInner() {
+  const el=document.getElementById('wkExerciseList');
+  // Selected exercises first (in order), then unselected
+  const selected = wkOrderedIds.map(id => exercises.find(e=>e.id===id)).filter(Boolean);
+  const unselected = exercises.filter(e => !wkOrderedIds.includes(e.id));
+  
+  let html = '';
+  if(selected.length) {
+    html += '<div style="font-size:11px;color:var(--text2);padding:4px 0;font-weight:600">IN WORKOUT (drag or use arrows to reorder)</div>';
+    selected.forEach((ex, i) => {
+      html += `<div class="check-item" style="display:flex;align-items:center;gap:6px;padding:6px 4px;background:var(--card);border-radius:8px;margin-bottom:4px">
+        <input type="checkbox" id="wkex_${ex.id}" value="${ex.id}" checked onchange="toggleWkExercise('${ex.id}',this.checked)">
+        <span style="font-size:12px;color:var(--text2);min-width:18px">${i+1}.</span>
+        <label for="wkex_${ex.id}" style="flex:1">${ex.name}</label>
+        <div style="display:flex;gap:2px">
+          ${i>0?`<button class="btn-icon" onclick="event.preventDefault();moveWkEx(${i},-1)" style="font-size:16px;padding:2px 6px">↑</button>`:'<span style="width:30px"></span>'}
+          ${i<selected.length-1?`<button class="btn-icon" onclick="event.preventDefault();moveWkEx(${i},1)" style="font-size:16px;padding:2px 6px">↓</button>`:'<span style="width:30px"></span>'}
+        </div>
+      </div>`;
+    });
+  }
+  if(unselected.length) {
+    html += '<div style="font-size:11px;color:var(--text2);padding:8px 0 4px;font-weight:600">AVAILABLE EXERCISES</div>';
+    unselected.forEach(ex => {
+      html += `<div class="check-item" style="padding:4px">
+        <input type="checkbox" id="wkex_${ex.id}" value="${ex.id}" onchange="toggleWkExercise('${ex.id}',this.checked)">
+        <label for="wkex_${ex.id}">${ex.name}</label>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function toggleWkExercise(id, checked) {
+  if(checked) { wkOrderedIds.push(id); } 
+  else { wkOrderedIds = wkOrderedIds.filter(x=>x!==id); }
+  renderWkExerciseListInner();
+}
+
+function moveWkEx(index, dir) {
+  const newIndex = index + dir;
+  if(newIndex < 0 || newIndex >= wkOrderedIds.length) return;
+  const temp = wkOrderedIds[index];
+  wkOrderedIds[index] = wkOrderedIds[newIndex];
+  wkOrderedIds[newIndex] = temp;
+  renderWkExerciseListInner();
 }
 
 async function saveWorkout() {
   const name=document.getElementById('wkName').value.trim(); if(!name) return;
-  const exerciseIds=[...document.querySelectorAll('#wkExerciseList input:checked')].map(cb=>cb.value);
+  const exerciseIds = [...wkOrderedIds];
   if(!exerciseIds.length) { alert('Select at least one exercise'); return; }
   
   const data = { name, exerciseIds };
