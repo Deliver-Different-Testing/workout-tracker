@@ -1220,7 +1220,15 @@ async function renderDailyStatsCard() {
         <div class="value" style="font-size:20px">${stats.resting_hr||'—'}</div>
         <div class="label">❤️ Resting HR</div>
       </div>
-      ${stats.sleep_hours ? `<div class="metric-card" style="grid-column:span 2">
+      <div class="metric-card">
+        <div class="value" style="font-size:20px">${stats.hrv||'—'}</div>
+        <div class="label">📊 HRV</div>
+      </div>
+      ${stats.readiness_score ? `<div class="metric-card">
+        <div class="value" style="font-size:20px;color:${stats.readiness_score>=85?'var(--green)':stats.readiness_score>=70?'var(--yellow)':'var(--accent)'}">${stats.readiness_score}</div>
+        <div class="label">⚡ Readiness</div>
+      </div>` : ''}
+      ${stats.sleep_hours ? `<div class="metric-card">
         <div class="value" style="font-size:20px">${stats.sleep_hours}h</div>
         <div class="label">😴 Sleep</div>
       </div>` : ''}
@@ -1276,6 +1284,7 @@ async function renderDailyTrends() {
   el.innerHTML = renderChart('Steps','👟','steps','var(--blue)') +
     renderChart('Sleep','😴','sleep_hours','var(--purple)','h') +
     renderChart('Resting HR','❤️','resting_hr','var(--accent)','bpm') +
+    renderChart('HRV','📊','hrv','var(--green)','ms') +
     renderChart('Calories','🔥','calories_burned','var(--yellow)');
 }
 
