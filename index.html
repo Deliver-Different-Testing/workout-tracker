@@ -299,7 +299,9 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     <label>Time</label>
     <input type="time" id="foodTime">
     <label>Quantity / Serving</label>
-    <input id="foodQuantity" placeholder="e.g. 1 serving, 500ml, 2 scoops">
+    <input id="foodQuantity" placeholder="e.g. 1 serving, 2 scoops">
+    <label id="foodMlWrap">Drink Volume (mL)</label>
+    <input id="foodMl" type="number" inputmode="decimal" placeholder="Optional for drinks">
     <div class="inline-actions">
       <div style="flex:1">
         <label>Calories</label>
@@ -594,7 +596,7 @@ function renderFoodLog(logs = []) {
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #222">
       <div style="flex:1;cursor:pointer" onclick="openFoodModal('', ${log.id})">
         <div style="font-size:15px;font-weight:600">${escapeHtml(log.item_name)}</div>
-        <div class="food-meta">${escapeHtml(prettyFoodType(log.category))}${log.time_text ? ' • '+escapeHtml(log.time_text) : ''}${log.quantity_text ? ' • '+escapeHtml(log.quantity_text) : ''}</div>
+        <div class="food-meta">${escapeHtml(prettyFoodType(log.category))}${log.time_text ? ' • '+escapeHtml(log.time_text) : ''}${log.quantity_text ? ' • '+escapeHtml(log.quantity_text) : ''}${log.ml ? ' • '+Math.round(log.ml)+' mL' : ''}</div>
         ${(log.calories || log.protein || log.carbs) ? `<div class="food-meta">${log.calories ? `${Math.round(log.calories)} cal` : ''}${log.protein ? ` • ${Math.round(log.protein)}g protein` : ''}${log.carbs ? ` • ${Math.round(log.carbs)}g carbs` : ''}</div>` : ''}
         ${log.notes ? `<div class="food-meta">${escapeHtml(log.notes)}</div>` : ''}
       </div>
@@ -609,16 +611,27 @@ function populateFoodItemsSelect() {
   select.innerHTML = '<option value="">— New item / none —</option>' + (foodItems || []).map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
 }
 
+function syncFoodMlVisibility() {
+  const isDrink = document.getElementById('foodCategory').value === 'drink';
+  const wrap = document.getElementById('foodMlWrap');
+  const input = document.getElementById('foodMl');
+  if (!wrap || !input) return;
+  wrap.style.display = isDrink ? 'block' : 'none';
+  input.style.display = isDrink ? 'block' : 'none';
+}
+
 function applySavedFoodItem(itemId) {
   const item = (foodItems || []).find(x => String(x.id) === String(itemId));
   if (!item) return;
   document.getElementById('foodName').value = item.name || '';
   document.getElementById('foodCategory').value = item.category || 'meal';
   document.getElementById('foodQuantity').value = item.default_quantity || '';
+  document.getElementById('foodMl').value = item.default_ml ?? '';
   document.getElementById('foodCalories').value = item.default_calories ?? '';
   document.getElementById('foodProtein').value = item.default_protein ?? '';
   document.getElementById('foodCarbs').value = item.default_carbs ?? '';
   document.getElementById('foodNotes').value = item.default_notes || '';
+  syncFoodMlVisibility();
 }
 
 function openFoodModal(itemId = '', logId = null) {
@@ -630,12 +643,15 @@ function openFoodModal(itemId = '', logId = null) {
   document.getElementById('foodTime').value = log?.time_text || new Date().toTimeString().slice(0,5);
   document.getElementById('foodName').value = log?.item_name || '';
   document.getElementById('foodCategory').value = log?.category || 'meal';
+  document.getElementById('foodCategory').onchange = syncFoodMlVisibility;
   document.getElementById('foodQuantity').value = log?.quantity_text || '';
+  document.getElementById('foodMl').value = log?.ml ?? '';
   document.getElementById('foodCalories').value = log?.calories ?? '';
   document.getElementById('foodProtein').value = log?.protein ?? '';
   document.getElementById('foodCarbs').value = log?.carbs ?? '';
   document.getElementById('foodNotes').value = log?.notes || '';
   document.getElementById('foodSaveForReuse').checked = true;
+  syncFoodMlVisibility();
   populateFoodItemsSelect();
   document.getElementById('foodSavedItem').value = log?.item_id ? String(log.item_id) : (itemId ? String(itemId) : '');
   if (!log && itemId) applySavedFoodItem(itemId);
@@ -650,6 +666,7 @@ async function saveFoodLog() {
     item_name: document.getElementById('foodName').value.trim(),
     category: document.getElementById('foodCategory').value || 'meal',
     quantity_text: document.getElementById('foodQuantity').value.trim(),
+    ml: parseFloat(document.getElementById('foodMl').value),
     calories: parseFloat(document.getElementById('foodCalories').value),
     protein: parseFloat(document.getElementById('foodProtein').value),
     carbs: parseFloat(document.getElementById('foodCarbs').value),
@@ -657,7 +674,7 @@ async function saveFoodLog() {
     save_for_reuse: document.getElementById('foodSaveForReuse').checked
   };
   if (!payload.item_name) { alert('Add an item name'); return; }
-  ['calories','protein','carbs'].forEach(k => { if (Number.isNaN(payload[k])) payload[k] = null; });
+  ['ml','calories','protein','carbs'].forEach(k => { if (Number.isNaN(payload[k])) payload[k] = null; });
   if (editingFoodLogId) await apiFetch('PUT', `/food-logs/${editingFoodLogId}`, payload);
   else await apiFetch('POST', '/food-logs', payload);
   editingFoodLogId = null;
