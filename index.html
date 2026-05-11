@@ -355,6 +355,7 @@ let activeProgram = null;
 let selectedHomeDate = null; // null = today
 let foodItems = [];
 let foodLogsCache = {};
+let editingFoodLogId = null;
 
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const homeDate = () => selectedHomeDate || today();
@@ -591,13 +592,13 @@ function renderFoodLog(logs = []) {
   }
   el.innerHTML = `<div class="card"><div class="card-title">📝 Food Log</div>${logs.map(log => `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #222">
-      <div style="flex:1">
+      <div style="flex:1;cursor:pointer" onclick="openFoodModal('', ${log.id})">
         <div style="font-size:15px;font-weight:600">${escapeHtml(log.item_name)}</div>
         <div class="food-meta">${escapeHtml(prettyFoodType(log.category))}${log.time_text ? ' • '+escapeHtml(log.time_text) : ''}${log.quantity_text ? ' • '+escapeHtml(log.quantity_text) : ''}</div>
         ${(log.calories || log.protein || log.carbs) ? `<div class="food-meta">${log.calories ? `${Math.round(log.calories)} cal` : ''}${log.protein ? ` • ${Math.round(log.protein)}g protein` : ''}${log.carbs ? ` • ${Math.round(log.carbs)}g carbs` : ''}</div>` : ''}
         ${log.notes ? `<div class="food-meta">${escapeHtml(log.notes)}</div>` : ''}
       </div>
-      <button class="btn-icon" onclick="deleteFoodLog(${log.id})" title="Delete">🗑</button>
+      <button class="btn-icon" onclick="event.stopPropagation();deleteFoodLog(${log.id})" title="Delete">🗑</button>
     </div>
   `).join('')}</div>`;
 }
@@ -620,21 +621,24 @@ function applySavedFoodItem(itemId) {
   document.getElementById('foodNotes').value = item.default_notes || '';
 }
 
-function openFoodModal(itemId = '') {
-  document.getElementById('foodModalTitle').textContent = itemId ? 'Reuse Food / Drink Item' : 'Add Food / Drink';
-  document.getElementById('foodDate').value = homeDate();
-  document.getElementById('foodTime').value = new Date().toTimeString().slice(0,5);
-  document.getElementById('foodName').value = '';
-  document.getElementById('foodCategory').value = 'meal';
-  document.getElementById('foodQuantity').value = '';
-  document.getElementById('foodCalories').value = '';
-  document.getElementById('foodProtein').value = '';
-  document.getElementById('foodCarbs').value = '';
-  document.getElementById('foodNotes').value = '';
+function openFoodModal(itemId = '', logId = null) {
+  editingFoodLogId = logId || null;
+  const currentLogs = foodLogsCache[homeDate()] || [];
+  const log = editingFoodLogId ? currentLogs.find(x => String(x.id) === String(editingFoodLogId)) : null;
+  document.getElementById('foodModalTitle').textContent = log ? 'Edit Food / Drink' : (itemId ? 'Reuse Food / Drink Item' : 'Add Food / Drink');
+  document.getElementById('foodDate').value = log?.date || homeDate();
+  document.getElementById('foodTime').value = log?.time_text || new Date().toTimeString().slice(0,5);
+  document.getElementById('foodName').value = log?.item_name || '';
+  document.getElementById('foodCategory').value = log?.category || 'meal';
+  document.getElementById('foodQuantity').value = log?.quantity_text || '';
+  document.getElementById('foodCalories').value = log?.calories ?? '';
+  document.getElementById('foodProtein').value = log?.protein ?? '';
+  document.getElementById('foodCarbs').value = log?.carbs ?? '';
+  document.getElementById('foodNotes').value = log?.notes || '';
   document.getElementById('foodSaveForReuse').checked = true;
   populateFoodItemsSelect();
-  document.getElementById('foodSavedItem').value = itemId ? String(itemId) : '';
-  if (itemId) applySavedFoodItem(itemId);
+  document.getElementById('foodSavedItem').value = log?.item_id ? String(log.item_id) : (itemId ? String(itemId) : '');
+  if (!log && itemId) applySavedFoodItem(itemId);
   openModal('foodModal');
 }
 
@@ -654,7 +658,9 @@ async function saveFoodLog() {
   };
   if (!payload.item_name) { alert('Add an item name'); return; }
   ['calories','protein','carbs'].forEach(k => { if (Number.isNaN(payload[k])) payload[k] = null; });
-  await apiFetch('POST', '/food-logs', payload);
+  if (editingFoodLogId) await apiFetch('PUT', `/food-logs/${editingFoodLogId}`, payload);
+  else await apiFetch('POST', '/food-logs', payload);
+  editingFoodLogId = null;
   closeModal('foodModal');
   renderHome();
 }
@@ -1478,8 +1484,11 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
 }
 function openModal(id) { document.getElementById(id).classList.add('show'); }
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
-document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{ if(e.target===bg) bg.classList.remove('show'); }));
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+  if (id === 'foodModal') editingFoodLogId = null;
+}
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{ if(e.target===bg) { bg.classList.remove('show'); if (bg.id === 'foodModal') editingFoodLogId = null; } }));
 
 // Init
 document.getElementById('restTimerSetting').value = DB.get('restTimer', 90);
