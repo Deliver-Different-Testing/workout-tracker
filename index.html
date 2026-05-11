@@ -118,6 +118,11 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
 .check-item:last-child { border-bottom:none; }
 .check-item input[type=checkbox] { width:20px; height:20px; margin:0; flex-shrink:0; }
 .check-item label { margin:0; font-size:14px; color:var(--text); flex:1; }
+.food-chip-row { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-top:8px; }
+.food-chip { padding:8px 12px; border-radius:999px; border:1px solid #444; background:var(--surface2); color:var(--text); font-size:13px; white-space:nowrap; cursor:pointer; }
+.food-meta { font-size:12px; color:var(--text2); margin-top:4px; }
+.inline-actions { display:flex; gap:8px; }
+.inline-actions .btn { width:auto; flex:1; }
 </style>
 </head>
 <body>
@@ -130,6 +135,8 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   <div id="weekStreak"></div>
   <div id="dailyStatsCard"></div>
   <div id="latestMetrics"></div>
+  <div id="foodSummaryCard"></div>
+  <div id="foodQuickAddCard"></div>
   <div style="margin-bottom:12px">
     <button class="btn btn-secondary" id="gfitSyncBtn" onclick="syncGoogleFit()">🔄 Sync Google Fit</button>
   </div>
@@ -140,7 +147,9 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   </div>
   <h2>Start Workout</h2>
   <div id="homeWorkoutButtons"></div>
+  <h2>Today</h2>
   <div id="todayLog" style="margin-top:12px"></div>
+  <div id="foodLog" style="margin-top:12px"></div>
   <button class="btn btn-secondary" style="margin-top:8px" onclick="switchPage('Body',2)">⚖️ Body History</button>
   <div id="ouraHome" style="margin-top:16px"></div>
 </div>
@@ -268,8 +277,65 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   </div>
 </div>
 
+<!-- FOOD LOG MODAL -->
+<div class="modal-bg" id="foodModal">
+  <div class="modal">
+    <h2 id="foodModalTitle">Add Food / Drink</h2>
+    <label>Date</label>
+    <input type="date" id="foodDate">
+    <label>Saved Item (optional)</label>
+    <select id="foodSavedItem" onchange="applySavedFoodItem(this.value)">
+      <option value="">— New item / none —</option>
+    </select>
+    <label>Item Name</label>
+    <input id="foodName" placeholder="e.g. Protein shake">
+    <label>Type</label>
+    <select id="foodCategory">
+      <option value="meal">Meal</option>
+      <option value="snack">Snack</option>
+      <option value="drink">Drink</option>
+      <option value="supplement">Supplement</option>
+    </select>
+    <label>Time</label>
+    <input type="time" id="foodTime">
+    <label>Quantity / Serving</label>
+    <input id="foodQuantity" placeholder="e.g. 1 serving, 500ml, 2 scoops">
+    <div class="inline-actions">
+      <div style="flex:1">
+        <label>Calories</label>
+        <input id="foodCalories" type="number" inputmode="decimal" placeholder="Optional">
+      </div>
+      <div style="flex:1">
+        <label>Protein (g)</label>
+        <input id="foodProtein" type="number" inputmode="decimal" placeholder="Optional">
+      </div>
+    </div>
+    <label>Carbs (g)</label>
+    <input id="foodCarbs" type="number" inputmode="decimal" placeholder="Optional">
+    <label>Notes</label>
+    <textarea id="foodNotes" placeholder="Optional notes"></textarea>
+    <div class="check-item" style="border-bottom:none;padding-top:4px">
+      <input type="checkbox" id="foodSaveForReuse" checked>
+      <label for="foodSaveForReuse">Save item for reuse</label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('foodModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFoodLog()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API_URL = 'https://workout-api-production-f340.up.railway.app/api';
+const DB = {
+  get(key, fallback) {
+    const raw = localStorage.getItem(`wt_${key}`);
+    return raw == null ? fallback : JSON.parse(raw);
+  },
+  set(key, value) {
+    localStorage.setItem(`wt_${key}`, JSON.stringify(value));
+  }
+};
 
 async function apiFetch(method, endpoint, data) {
   const options = {
@@ -287,6 +353,8 @@ let exercises = [];
 let programs = [];
 let activeProgram = null;
 let selectedHomeDate = null; // null = today
+let foodItems = [];
+let foodLogsCache = {};
 
 const today = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const homeDate = () => selectedHomeDate || today();
@@ -315,18 +383,26 @@ async function fetchAllSetupData() {
 async function renderHome() {
   try {
     await fetchAllSetupData();
-    const [workoutsData, activitiesData, bodyMetricsData] = await Promise.all([
+    const selectedDate = homeDate();
+    const [workoutsData, activitiesData, bodyMetricsData, foodLogsData, foodItemsData] = await Promise.all([
       apiFetch('GET', '/workouts').catch(()=>({})),
       apiFetch('GET', '/activities').catch(()=>[]),
-      apiFetch('GET', '/body-metrics').catch(()=>[])
+      apiFetch('GET', '/body-metrics').catch(()=>[]),
+      apiFetch('GET', `/food-logs?date=${selectedDate}`).catch(()=>[]),
+      apiFetch('GET', '/food-items').catch(()=>[])
     ]);
-    
+    foodLogsCache[selectedDate] = foodLogsData || [];
+    foodItems = foodItemsData || [];
+
     renderWeekStreak(workoutsData, activitiesData);
     renderDailyStatsCard();
     renderLatestMetrics(bodyMetricsData);
+    renderFoodSummaryCard(foodLogsCache[selectedDate]);
+    renderFoodQuickAddCard();
     renderOuraHome();
     renderHomeWorkouts();
     renderTodayLog(workoutsData, activitiesData);
+    renderFoodLog(foodLogsCache[selectedDate]);
     highlightTodayActivities(activitiesData, workoutsData);
   } catch(e) { console.error('renderHome failed:', e); }
 }
@@ -467,6 +543,125 @@ async function deleteActivity(id) {
 async function deleteWorkoutDay(date) {
   if(!confirm('Delete this workout?')) return;
   await apiFetch('POST', '/workouts', {date, programId: '', exercises: {}});
+  renderHome();
+}
+
+function renderFoodSummaryCard(logs = []) {
+  const el = document.getElementById('foodSummaryCard');
+  if (!el) return;
+  const totals = logs.reduce((acc, log) => {
+    acc.calories += Number(log.calories || 0);
+    acc.protein += Number(log.protein || 0);
+    acc.carbs += Number(log.carbs || 0);
+    return acc;
+  }, { calories: 0, protein: 0, carbs: 0 });
+  el.innerHTML = `<div class="card">
+    <div class="card-title">🍽️ Food & Drink ${homeDate() === today() ? 'Today' : formatDate(homeDate())}</div>
+    <div class="metric-grid">
+      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.calories)}</div><div class="label">Calories</div></div>
+      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.protein)}g</div><div class="label">Protein</div></div>
+      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.carbs)}g</div><div class="label">Carbs</div></div>
+      <div class="metric-card"><div class="value" style="font-size:20px">${logs.length}</div><div class="label">Entries</div></div>
+    </div>
+  </div>`;
+}
+
+function renderFoodQuickAddCard() {
+  const el = document.getElementById('foodQuickAddCard');
+  if (!el) return;
+  const recent = (foodItems || []).slice(0, 8);
+  el.innerHTML = `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <div>
+        <div class="card-title" style="margin-bottom:4px">⚡ Quick Add Food & Drink</div>
+        <div class="food-meta">Save items once, then reuse them fast.</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="openFoodModal()">+ Add</button>
+    </div>
+    ${recent.length ? `<div class="food-chip-row">${recent.map(item => `<button class="food-chip" onclick="openFoodModal(${item.id})">${escapeHtml(item.name)}</button>`).join('')}</div>` : '<div class="food-meta" style="margin-top:8px">No saved items yet — add your first meal, drink, or supplement.</div>'}
+  </div>`;
+}
+
+function renderFoodLog(logs = []) {
+  const el = document.getElementById('foodLog');
+  if (!el) return;
+  if (!logs.length) {
+    el.innerHTML = `<div class="card"><div class="card-title">📝 Food Log</div><div style="font-size:13px;color:var(--text2);text-align:center;padding:8px 0">No food or drink logged ${homeDate()===today() ? 'today' : 'for '+formatDate(homeDate())}</div></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="card"><div class="card-title">📝 Food Log</div>${logs.map(log => `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #222">
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:600">${escapeHtml(log.item_name)}</div>
+        <div class="food-meta">${escapeHtml(prettyFoodType(log.category))}${log.time_text ? ' • '+escapeHtml(log.time_text) : ''}${log.quantity_text ? ' • '+escapeHtml(log.quantity_text) : ''}</div>
+        ${(log.calories || log.protein || log.carbs) ? `<div class="food-meta">${log.calories ? `${Math.round(log.calories)} cal` : ''}${log.protein ? ` • ${Math.round(log.protein)}g protein` : ''}${log.carbs ? ` • ${Math.round(log.carbs)}g carbs` : ''}</div>` : ''}
+        ${log.notes ? `<div class="food-meta">${escapeHtml(log.notes)}</div>` : ''}
+      </div>
+      <button class="btn-icon" onclick="deleteFoodLog(${log.id})" title="Delete">🗑</button>
+    </div>
+  `).join('')}</div>`;
+}
+
+function populateFoodItemsSelect() {
+  const select = document.getElementById('foodSavedItem');
+  if (!select) return;
+  select.innerHTML = '<option value="">— New item / none —</option>' + (foodItems || []).map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join('');
+}
+
+function applySavedFoodItem(itemId) {
+  const item = (foodItems || []).find(x => String(x.id) === String(itemId));
+  if (!item) return;
+  document.getElementById('foodName').value = item.name || '';
+  document.getElementById('foodCategory').value = item.category || 'meal';
+  document.getElementById('foodQuantity').value = item.default_quantity || '';
+  document.getElementById('foodCalories').value = item.default_calories ?? '';
+  document.getElementById('foodProtein').value = item.default_protein ?? '';
+  document.getElementById('foodCarbs').value = item.default_carbs ?? '';
+  document.getElementById('foodNotes').value = item.default_notes || '';
+}
+
+function openFoodModal(itemId = '') {
+  document.getElementById('foodModalTitle').textContent = itemId ? 'Reuse Food / Drink Item' : 'Add Food / Drink';
+  document.getElementById('foodDate').value = homeDate();
+  document.getElementById('foodTime').value = new Date().toTimeString().slice(0,5);
+  document.getElementById('foodName').value = '';
+  document.getElementById('foodCategory').value = 'meal';
+  document.getElementById('foodQuantity').value = '';
+  document.getElementById('foodCalories').value = '';
+  document.getElementById('foodProtein').value = '';
+  document.getElementById('foodCarbs').value = '';
+  document.getElementById('foodNotes').value = '';
+  document.getElementById('foodSaveForReuse').checked = true;
+  populateFoodItemsSelect();
+  document.getElementById('foodSavedItem').value = itemId ? String(itemId) : '';
+  if (itemId) applySavedFoodItem(itemId);
+  openModal('foodModal');
+}
+
+async function saveFoodLog() {
+  const payload = {
+    date: document.getElementById('foodDate').value || homeDate(),
+    time_text: document.getElementById('foodTime').value || '',
+    item_id: document.getElementById('foodSavedItem').value || null,
+    item_name: document.getElementById('foodName').value.trim(),
+    category: document.getElementById('foodCategory').value || 'meal',
+    quantity_text: document.getElementById('foodQuantity').value.trim(),
+    calories: parseFloat(document.getElementById('foodCalories').value),
+    protein: parseFloat(document.getElementById('foodProtein').value),
+    carbs: parseFloat(document.getElementById('foodCarbs').value),
+    notes: document.getElementById('foodNotes').value.trim(),
+    save_for_reuse: document.getElementById('foodSaveForReuse').checked
+  };
+  if (!payload.item_name) { alert('Add an item name'); return; }
+  ['calories','protein','carbs'].forEach(k => { if (Number.isNaN(payload[k])) payload[k] = null; });
+  await apiFetch('POST', '/food-logs', payload);
+  closeModal('foodModal');
+  renderHome();
+}
+
+async function deleteFoodLog(id) {
+  if (!confirm('Delete this food entry?')) return;
+  await apiFetch('DELETE', `/food-logs/${id}`);
   renderHome();
 }
 
@@ -1275,12 +1470,19 @@ async function renderDailyTrends() {
 
 // --- UTILS ---
 function formatDate(d) { const[y,m,day]=d.split('-'); return `${parseInt(day)}/${parseInt(m)}`; }
+function prettyFoodType(type) {
+  const map = { meal:'Meal', snack:'Snack', drink:'Drink', supplement:'Supplement' };
+  return map[type] || 'Item';
+}
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[ch]));
+}
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{ if(e.target===bg) bg.classList.remove('show'); }));
 
 // Init
-document.getElementById('restTimerSetting').value=DB.get('restTimer',90);
+document.getElementById('restTimerSetting').value = DB.get('restTimer', 90);
 renderHome();
 </script>
 </body>
