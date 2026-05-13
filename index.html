@@ -208,21 +208,21 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   <div class="inline-actions">
     <div style="flex:1">
       <label>Calories</label>
-      <input type="number" id="goalCalSetting" inputmode="decimal" placeholder="e.g. 2400" onchange="DB.set('goalCal', parseFloat(this.value)||0); renderHome()">
+      <input type="number" id="goalCalSetting" inputmode="decimal" placeholder="e.g. 2400" onchange="saveGoal('goalCal', this.value)">
     </div>
     <div style="flex:1">
       <label>Protein (g)</label>
-      <input type="number" id="goalProteinSetting" inputmode="decimal" placeholder="e.g. 160" onchange="DB.set('goalProtein', parseFloat(this.value)||0); renderHome()">
+      <input type="number" id="goalProteinSetting" inputmode="decimal" placeholder="e.g. 160" onchange="saveGoal('goalProtein', this.value)">
     </div>
   </div>
   <div class="inline-actions">
     <div style="flex:1">
       <label>Carbs (g)</label>
-      <input type="number" id="goalCarbsSetting" inputmode="decimal" placeholder="e.g. 250" onchange="DB.set('goalCarbs', parseFloat(this.value)||0); renderHome()">
+      <input type="number" id="goalCarbsSetting" inputmode="decimal" placeholder="e.g. 250" onchange="saveGoal('goalCarbs', this.value)">
     </div>
     <div style="flex:1">
       <label>Water (mL)</label>
-      <input type="number" id="goalWaterSetting" inputmode="decimal" placeholder="e.g. 2500" onchange="DB.set('goalWater', parseFloat(this.value)||0); renderHome()">
+      <input type="number" id="goalWaterSetting" inputmode="decimal" placeholder="e.g. 2500" onchange="saveGoal('goalWater', this.value)">
     </div>
   </div>
 
@@ -377,6 +377,19 @@ async function apiFetch(method, endpoint, data) {
 }
 
 // Global state (now reflects server data)
+let appSettings = {};
+async function loadAppSettings() {
+  try { appSettings = await apiFetch('GET', '/settings') || {}; }
+  catch(e) { console.error('loadAppSettings failed:', e); appSettings = {}; }
+}
+async function saveGoal(key, value) {
+  const v = value === '' ? null : String(parseFloat(value) || 0);
+  appSettings[key] = v;
+  try { await apiFetch('PUT', '/settings', { [key]: v }); }
+  catch(e) { console.error('saveGoal failed:', e); }
+  renderHome();
+}
+
 let exercises = [];
 let programs = [];
 let activeProgram = null;
@@ -586,10 +599,10 @@ function renderFoodSummaryCard(logs = []) {
     return acc;
   }, { calories: 0, protein: 0, carbs: 0, ml: 0 });
   const goals = {
-    calories: DB.get('goalCal', 0),
-    protein: DB.get('goalProtein', 0),
-    carbs: DB.get('goalCarbs', 0),
-    ml: DB.get('goalWater', 0)
+    calories: parseFloat(appSettings.goalCal) || 0,
+    protein: parseFloat(appSettings.goalProtein) || 0,
+    carbs: parseFloat(appSettings.goalCarbs) || 0,
+    ml: parseFloat(appSettings.goalWater) || 0
   };
   const tile = (label, actual, goal, unit) => {
     const a = Math.round(actual);
@@ -1581,12 +1594,18 @@ document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e
 
 // Init
 document.getElementById('restTimerSetting').value = DB.get('restTimer', 90);
-if (DB.get('goalProtein', null) === null) DB.set('goalProtein', 160);
-document.getElementById('goalCalSetting').value = DB.get('goalCal', '') || '';
-document.getElementById('goalProteinSetting').value = DB.get('goalProtein', '') || '';
-document.getElementById('goalCarbsSetting').value = DB.get('goalCarbs', '') || '';
-document.getElementById('goalWaterSetting').value = DB.get('goalWater', '') || '';
-renderHome();
+(async () => {
+  await loadAppSettings();
+  if (appSettings.goalProtein == null) {
+    appSettings.goalProtein = '160';
+    try { await apiFetch('PUT', '/settings', { goalProtein: '160' }); } catch(e) { /* ignore */ }
+  }
+  document.getElementById('goalCalSetting').value = appSettings.goalCal ?? '';
+  document.getElementById('goalProteinSetting').value = appSettings.goalProtein ?? '';
+  document.getElementById('goalCarbsSetting').value = appSettings.goalCarbs ?? '';
+  document.getElementById('goalWaterSetting').value = appSettings.goalWater ?? '';
+  renderHome();
+})();
 </script>
 </body>
 </html>
