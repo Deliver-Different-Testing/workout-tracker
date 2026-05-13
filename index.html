@@ -147,6 +147,9 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   </div>
   <h2>Start Workout</h2>
   <div id="homeWorkoutButtons"></div>
+  <div style="margin-top:8px">
+    <button class="btn btn-secondary" id="generateUpperBtn" onclick="generateWorkout('upper')">✨ Generate New Upper Body Workout</button>
+  </div>
   <h2>Today</h2>
   <div id="todayLog" style="margin-top:12px"></div>
   <div id="foodLog" style="margin-top:12px"></div>
@@ -295,6 +298,18 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('activityModal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveActivity()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- GENERATE WORKOUT MODAL -->
+<div class="modal-bg" id="generateModal">
+  <div class="modal">
+    <h2 id="generateModalTitle">Suggested Workout</h2>
+    <div id="generateContent"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('generateModal')">Cancel</button>
+      <button class="btn btn-primary" id="generateSaveBtn" onclick="saveGeneratedWorkout()">Save as Program</button>
     </div>
   </div>
 </div>
@@ -711,6 +726,82 @@ function openFoodModal(itemId = '', logId = null) {
   document.getElementById('foodSavedItem').value = log?.item_id ? String(log.item_id) : (itemId ? String(itemId) : '');
   if (!log && itemId) applySavedFoodItem(itemId);
   openModal('foodModal');
+}
+
+let generatedProposal = null;
+
+async function generateWorkout(type) {
+  const btn = document.getElementById('generateUpperBtn');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  try {
+    generatedProposal = await apiFetch('POST', '/generate-workout', { type });
+    renderGeneratedProposal();
+    openModal('generateModal');
+  } catch (e) {
+    alert('Generate failed: ' + (e.message || 'unknown error'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+function renderGeneratedProposal() {
+  const el = document.getElementById('generateContent');
+  if (!generatedProposal) { el.innerHTML = ''; return; }
+  document.getElementById('generateModalTitle').textContent = generatedProposal.program_name || 'Suggested Workout';
+  const items = (generatedProposal.exercises || []).map((ex, i) => `
+    <div style="margin:8px 0;padding:10px;background:var(--surface2);border-radius:8px">
+      <div style="display:flex;justify-content:space-between;gap:8px">
+        <strong>${escapeHtml(ex.name || '')}</strong>
+        ${ex.is_existing ? '' : '<span style="color:#4ade80;font-size:11px;align-self:flex-start">NEW</span>'}
+      </div>
+      <div style="font-size:13px;margin-top:2px">${ex.sets || '?'} × ${ex.reps || '?'} @ ${ex.suggested_weight_kg ? ex.suggested_weight_kg + 'kg' : 'bodyweight'}</div>
+      ${ex.notes ? `<div class="food-meta" style="margin-top:4px">${escapeHtml(ex.notes)}</div>` : ''}
+    </div>
+  `).join('');
+  el.innerHTML = items || '<div class="food-meta">No exercises returned.</div>';
+}
+
+async function saveGeneratedWorkout() {
+  if (!generatedProposal || !Array.isArray(generatedProposal.exercises) || !generatedProposal.exercises.length) return;
+  const btn = document.getElementById('generateSaveBtn');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Saving…';
+  try {
+    const exerciseIds = [];
+    for (const ex of generatedProposal.exercises) {
+      if (ex.is_existing && ex.existing_id) {
+        exerciseIds.push(ex.existing_id);
+      } else {
+        const r = await apiFetch('POST', '/exercises', {
+          name: ex.name,
+          notes: ex.notes || '',
+          sets: ex.sets || 2,
+          reps: ex.reps || 10,
+          sort_order: 0
+        });
+        exerciseIds.push(r.id);
+      }
+    }
+    await apiFetch('POST', '/programs', {
+      name: generatedProposal.program_name || ('AI Workout ' + new Date().toISOString().slice(0,10)),
+      exerciseIds,
+      sort_order: 999
+    });
+    closeModal('generateModal');
+    generatedProposal = null;
+    await fetchAllSetupData();
+    renderHome();
+    alert('Saved.');
+  } catch (e) {
+    alert('Save failed: ' + (e.message || 'unknown error'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
 }
 
 async function estimateFoodMacros() {
