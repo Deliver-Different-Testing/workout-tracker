@@ -314,6 +314,10 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     </div>
     <label>Carbs (g)</label>
     <input id="foodCarbs" type="number" inputmode="decimal" placeholder="Optional">
+    <div style="margin-top:8px">
+      <button type="button" class="btn btn-secondary btn-sm" id="foodEstimateBtn" onclick="estimateFoodMacros()">✨ Estimate macros with AI</button>
+      <div id="foodEstimateMsg" class="food-meta" style="margin-top:6px"></div>
+    </div>
     <label>Notes</label>
     <textarea id="foodNotes" placeholder="Optional notes"></textarea>
     <div class="check-item" style="border-bottom:none;padding-top:4px">
@@ -556,15 +560,16 @@ function renderFoodSummaryCard(logs = []) {
     acc.calories += Number(log.calories || 0);
     acc.protein += Number(log.protein || 0);
     acc.carbs += Number(log.carbs || 0);
+    acc.ml += Number(log.ml || 0);
     return acc;
-  }, { calories: 0, protein: 0, carbs: 0 });
+  }, { calories: 0, protein: 0, carbs: 0, ml: 0 });
   el.innerHTML = `<div class="card">
     <div class="card-title">🍽️ Food & Drink ${homeDate() === today() ? 'Today' : formatDate(homeDate())}</div>
     <div class="metric-grid">
       <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.calories)}</div><div class="label">Calories</div></div>
       <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.protein)}g</div><div class="label">Protein</div></div>
       <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.carbs)}g</div><div class="label">Carbs</div></div>
-      <div class="metric-card"><div class="value" style="font-size:20px">${logs.length}</div><div class="label">Entries</div></div>
+      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.ml)}<span style="font-size:12px">mL</span></div><div class="label">Fluid</div></div>
     </div>
   </div>`;
 }
@@ -656,6 +661,36 @@ function openFoodModal(itemId = '', logId = null) {
   document.getElementById('foodSavedItem').value = log?.item_id ? String(log.item_id) : (itemId ? String(itemId) : '');
   if (!log && itemId) applySavedFoodItem(itemId);
   openModal('foodModal');
+}
+
+async function estimateFoodMacros() {
+  const btn = document.getElementById('foodEstimateBtn');
+  const msg = document.getElementById('foodEstimateMsg');
+  const name = document.getElementById('foodName').value.trim();
+  if (!name) { msg.textContent = 'Add an item name first.'; return; }
+  const payload = {
+    name,
+    category: document.getElementById('foodCategory').value || 'meal',
+    quantity_text: document.getElementById('foodQuantity').value.trim(),
+    ml: parseFloat(document.getElementById('foodMl').value) || null,
+    notes: document.getElementById('foodNotes').value.trim()
+  };
+  btn.disabled = true;
+  const originalLabel = btn.textContent;
+  btn.textContent = 'Estimating…';
+  msg.textContent = '';
+  try {
+    const r = await apiFetch('POST', '/food-estimate', payload);
+    if (r.calories != null) document.getElementById('foodCalories').value = r.calories;
+    if (r.protein != null) document.getElementById('foodProtein').value = r.protein;
+    if (r.carbs != null) document.getElementById('foodCarbs').value = r.carbs;
+    msg.textContent = 'AI estimate filled in — review and edit if needed.';
+  } catch (e) {
+    msg.textContent = 'Estimate failed: ' + (e.message || 'unknown error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
 }
 
 async function saveFoodLog() {
