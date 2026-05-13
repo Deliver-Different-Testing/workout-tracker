@@ -204,6 +204,28 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     <button class="btn btn-secondary" onclick="loadDefaults()">Load Steve's Program</button>
   </div>
 
+  <h2 style="margin-top:24px">Daily Nutrition Goals</h2>
+  <div class="inline-actions">
+    <div style="flex:1">
+      <label>Calories</label>
+      <input type="number" id="goalCalSetting" inputmode="decimal" placeholder="e.g. 2400" onchange="saveGoal('goalCal', this.value)">
+    </div>
+    <div style="flex:1">
+      <label>Protein (g)</label>
+      <input type="number" id="goalProteinSetting" inputmode="decimal" placeholder="e.g. 160" onchange="saveGoal('goalProtein', this.value)">
+    </div>
+  </div>
+  <div class="inline-actions">
+    <div style="flex:1">
+      <label>Carbs (g)</label>
+      <input type="number" id="goalCarbsSetting" inputmode="decimal" placeholder="e.g. 250" onchange="saveGoal('goalCarbs', this.value)">
+    </div>
+    <div style="flex:1">
+      <label>Water (mL)</label>
+      <input type="number" id="goalWaterSetting" inputmode="decimal" placeholder="e.g. 2500" onchange="saveGoal('goalWater', this.value)">
+    </div>
+  </div>
+
   <h2 style="margin-top:24px">Rest Timer (seconds)</h2>
   <input type="number" id="restTimerSetting" value="90" onchange="DB.set('restTimer',parseInt(this.value)||90)">
   <h2 style="margin-top:16px">Data</h2>
@@ -355,6 +377,19 @@ async function apiFetch(method, endpoint, data) {
 }
 
 // Global state (now reflects server data)
+let appSettings = {};
+async function loadAppSettings() {
+  try { appSettings = await apiFetch('GET', '/settings') || {}; }
+  catch(e) { console.error('loadAppSettings failed:', e); appSettings = {}; }
+}
+async function saveGoal(key, value) {
+  const v = value === '' ? null : String(parseFloat(value) || 0);
+  appSettings[key] = v;
+  try { await apiFetch('PUT', '/settings', { [key]: v }); }
+  catch(e) { console.error('saveGoal failed:', e); }
+  renderHome();
+}
+
 let exercises = [];
 let programs = [];
 let activeProgram = null;
@@ -563,13 +598,28 @@ function renderFoodSummaryCard(logs = []) {
     acc.ml += Number(log.ml || 0);
     return acc;
   }, { calories: 0, protein: 0, carbs: 0, ml: 0 });
+  const goals = {
+    calories: parseFloat(appSettings.goalCal) || 0,
+    protein: parseFloat(appSettings.goalProtein) || 0,
+    carbs: parseFloat(appSettings.goalCarbs) || 0,
+    ml: parseFloat(appSettings.goalWater) || 0
+  };
+  const tile = (label, actual, goal, unit) => {
+    const a = Math.round(actual);
+    const hit = goal > 0 && actual >= goal;
+    const valueStyle = `font-size:20px${hit ? ';color:#4ade80' : ''}`;
+    const valueText = goal > 0
+      ? `${a}<span style="font-size:12px;color:var(--text2)"> / ${Math.round(goal)}${unit}</span>`
+      : `${a}${unit ? `<span style="font-size:12px">${unit}</span>` : ''}`;
+    return `<div class="metric-card"><div class="value" style="${valueStyle}">${valueText}</div><div class="label">${label}</div></div>`;
+  };
   el.innerHTML = `<div class="card">
     <div class="card-title">🍽️ Food & Drink ${homeDate() === today() ? 'Today' : formatDate(homeDate())}</div>
     <div class="metric-grid">
-      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.calories)}</div><div class="label">Calories</div></div>
-      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.protein)}g</div><div class="label">Protein</div></div>
-      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.carbs)}g</div><div class="label">Carbs</div></div>
-      <div class="metric-card"><div class="value" style="font-size:20px">${Math.round(totals.ml)}<span style="font-size:12px">mL</span></div><div class="label">Fluid</div></div>
+      ${tile('Calories', totals.calories, goals.calories, '')}
+      ${tile('Protein', totals.protein, goals.protein, 'g')}
+      ${tile('Carbs', totals.carbs, goals.carbs, 'g')}
+      ${tile('Fluid', totals.ml, goals.ml, 'mL')}
     </div>
   </div>`;
 }
@@ -1544,7 +1594,18 @@ document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e
 
 // Init
 document.getElementById('restTimerSetting').value = DB.get('restTimer', 90);
-renderHome();
+(async () => {
+  await loadAppSettings();
+  if (appSettings.goalProtein == null) {
+    appSettings.goalProtein = '160';
+    try { await apiFetch('PUT', '/settings', { goalProtein: '160' }); } catch(e) { /* ignore */ }
+  }
+  document.getElementById('goalCalSetting').value = appSettings.goalCal ?? '';
+  document.getElementById('goalProteinSetting').value = appSettings.goalProtein ?? '';
+  document.getElementById('goalCarbsSetting').value = appSettings.goalCarbs ?? '';
+  document.getElementById('goalWaterSetting').value = appSettings.goalWater ?? '';
+  renderHome();
+})();
 </script>
 </body>
 </html>
