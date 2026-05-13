@@ -147,8 +147,13 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   </div>
   <h2>Start Workout</h2>
   <div id="homeWorkoutButtons"></div>
-  <div style="margin-top:8px">
-    <button class="btn btn-secondary" id="generateUpperBtn" onclick="generateWorkout('upper')">✨ Generate New Upper Body Workout</button>
+  <div style="margin-top:12px">
+    <div class="food-meta" style="margin-bottom:6px">✨ Generate new workout</div>
+    <div class="inline-actions">
+      <button class="btn btn-secondary btn-sm" onclick="generateWorkout('upper')">Upper</button>
+      <button class="btn btn-secondary btn-sm" onclick="generateWorkout('lower')">Lower</button>
+      <button class="btn btn-secondary btn-sm" onclick="generateWorkout('combined')">Combined</button>
+    </div>
   </div>
   <h2>Today</h2>
   <div id="todayLog" style="margin-top:12px"></div>
@@ -309,6 +314,7 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     <div id="generateContent"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('generateModal')">Cancel</button>
+      <button class="btn btn-secondary" id="generateOnceBtn" onclick="useGeneratedOnce()">Use Once</button>
       <button class="btn btn-primary" id="generateSaveBtn" onclick="saveGeneratedWorkout()">Save as Program</button>
     </div>
   </div>
@@ -466,11 +472,12 @@ async function renderHome() {
 
 function renderHomeWorkouts() {
   const el = document.getElementById('homeWorkoutButtons');
-  if(!programs.length) {
+  const visible = (programs || []).filter(p => !String(p.name || '').startsWith('[One-off]'));
+  if(!visible.length) {
     el.innerHTML = '<div style="font-size:13px;color:var(--text2)">Set up workouts in ⚙️ Setup first</div>';
     return;
   }
-  el.innerHTML = programs.map(p => 
+  el.innerHTML = visible.map(p =>
     `<button class="btn btn-primary" style="margin-bottom:8px" onclick="startWorkout('${p.id}')">🏋️ ${p.name}</button>`
   ).join('');
 }
@@ -731,10 +738,9 @@ function openFoodModal(itemId = '', logId = null) {
 let generatedProposal = null;
 
 async function generateWorkout(type) {
-  const btn = document.getElementById('generateUpperBtn');
-  const orig = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Generating…';
+  const triggerBtn = event && event.target;
+  const orig = triggerBtn && triggerBtn.textContent;
+  if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.textContent = '…'; }
   try {
     generatedProposal = await apiFetch('POST', '/generate-workout', { type });
     renderGeneratedProposal();
@@ -742,8 +748,7 @@ async function generateWorkout(type) {
   } catch (e) {
     alert('Generate failed: ' + (e.message || 'unknown error'));
   } finally {
-    btn.disabled = false;
-    btn.textContent = orig;
+    if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.textContent = orig; }
   }
 }
 
@@ -764,6 +769,32 @@ function renderGeneratedProposal() {
   el.innerHTML = items || '<div class="food-meta">No exercises returned.</div>';
 }
 
+async function persistGeneratedProgram(namePrefix) {
+  const exerciseIds = [];
+  for (const ex of generatedProposal.exercises) {
+    if (ex.is_existing && ex.existing_id) {
+      exerciseIds.push(ex.existing_id);
+    } else {
+      const r = await apiFetch('POST', '/exercises', {
+        name: ex.name,
+        notes: ex.notes || '',
+        sets: ex.sets || 2,
+        reps: ex.reps || 10,
+        sort_order: 0
+      });
+      exerciseIds.push(r.id);
+    }
+  }
+  const baseName = generatedProposal.program_name || ('AI Workout ' + new Date().toISOString().slice(0,10));
+  const finalName = namePrefix ? `${namePrefix} ${baseName}` : baseName;
+  const r = await apiFetch('POST', '/programs', {
+    name: finalName,
+    exerciseIds,
+    sort_order: 999
+  });
+  return r.id;
+}
+
 async function saveGeneratedWorkout() {
   if (!generatedProposal || !Array.isArray(generatedProposal.exercises) || !generatedProposal.exercises.length) return;
   const btn = document.getElementById('generateSaveBtn');
@@ -771,26 +802,7 @@ async function saveGeneratedWorkout() {
   const orig = btn.textContent;
   btn.textContent = 'Saving…';
   try {
-    const exerciseIds = [];
-    for (const ex of generatedProposal.exercises) {
-      if (ex.is_existing && ex.existing_id) {
-        exerciseIds.push(ex.existing_id);
-      } else {
-        const r = await apiFetch('POST', '/exercises', {
-          name: ex.name,
-          notes: ex.notes || '',
-          sets: ex.sets || 2,
-          reps: ex.reps || 10,
-          sort_order: 0
-        });
-        exerciseIds.push(r.id);
-      }
-    }
-    await apiFetch('POST', '/programs', {
-      name: generatedProposal.program_name || ('AI Workout ' + new Date().toISOString().slice(0,10)),
-      exerciseIds,
-      sort_order: 999
-    });
+    await persistGeneratedProgram(null);
     closeModal('generateModal');
     generatedProposal = null;
     await fetchAllSetupData();
@@ -798,6 +810,26 @@ async function saveGeneratedWorkout() {
     alert('Saved.');
   } catch (e) {
     alert('Save failed: ' + (e.message || 'unknown error'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+async function useGeneratedOnce() {
+  if (!generatedProposal || !Array.isArray(generatedProposal.exercises) || !generatedProposal.exercises.length) return;
+  const btn = document.getElementById('generateOnceBtn');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = 'Starting…';
+  try {
+    const programId = await persistGeneratedProgram('[One-off]');
+    closeModal('generateModal');
+    generatedProposal = null;
+    await fetchAllSetupData();
+    startWorkout(programId);
+  } catch (e) {
+    alert('Start failed: ' + (e.message || 'unknown error'));
   } finally {
     btn.disabled = false;
     btn.textContent = orig;
