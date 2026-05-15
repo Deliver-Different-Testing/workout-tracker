@@ -176,7 +176,45 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
 <!-- BODY METRICS PAGE -->
 <div class="page" id="pageBody">
   <h1>⚖️ Body Metrics</h1>
-  <h2 style="margin-top:0">History</h2>
+
+  <div class="card">
+    <div class="card-title">Add Measurement</div>
+    <div id="btConnectArea"></div>
+    <div class="inline-actions">
+      <div style="flex:1"><label>Date</label><input type="date" id="bodyDate"></div>
+    </div>
+    <div class="inline-actions">
+      <div style="flex:1"><label>Weight (kg)</label><input id="bodyWeight" type="number" step="0.05" inputmode="decimal"></div>
+      <div style="flex:1"><label>BMI</label><input id="bodyBmi" type="number" step="0.1" inputmode="decimal"></div>
+    </div>
+    <div class="inline-actions">
+      <div style="flex:1"><label>Body Fat (%)</label><input id="bodyFat" type="number" step="0.1" inputmode="decimal"></div>
+      <div style="flex:1"><label>Muscle Mass (kg)</label><input id="bodyMuscle" type="number" step="0.1" inputmode="decimal"></div>
+    </div>
+    <div class="inline-actions">
+      <div style="flex:1"><label>Visceral Fat</label><input id="bodyVisceral" type="number" step="1" inputmode="decimal"></div>
+      <div style="flex:1"><label>Bone Mass (kg)</label><input id="bodyBone" type="number" step="0.1" inputmode="decimal"></div>
+    </div>
+    <div class="inline-actions">
+      <div style="flex:1"><label>BMR (kcal)</label><input id="bodyBmr" type="number" step="1" inputmode="decimal"></div>
+      <div style="flex:1"><label>Body Water (%)</label><input id="bodyWater" type="number" step="0.1" inputmode="decimal"></div>
+    </div>
+    <div class="inline-actions">
+      <div style="flex:1"><label>Metabolic Age</label><input id="bodyMetAge" type="number" step="1" inputmode="decimal"></div>
+      <div style="flex:1"><label>Muscle Quality</label><input id="bodyMq" type="number" step="1" inputmode="decimal"></div>
+    </div>
+    <div class="inline-actions">
+      <div style="flex:1"><label>Body Type</label><input id="bodyType" type="number" step="1" inputmode="decimal"></div>
+      <div style="flex:1"></div>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn btn-primary" onclick="saveBodyMetrics()">Save Measurement</button>
+    </div>
+  </div>
+
+  <div id="bodyGoalsCard"></div>
+
+  <h2>History</h2>
   <div id="bodyHistory"></div>
 </div>
 
@@ -231,6 +269,18 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
     <div style="flex:1">
       <label>Water (mL)</label>
       <input type="number" id="goalWaterSetting" inputmode="decimal" placeholder="e.g. 2500" onchange="saveGoal('goalWater', this.value)">
+    </div>
+  </div>
+
+  <h2 style="margin-top:24px">Body Goals</h2>
+  <div class="inline-actions">
+    <div style="flex:1">
+      <label>Max Weight (kg)</label>
+      <input type="number" id="goalWeightMaxSetting" inputmode="decimal" step="0.1" placeholder="e.g. 90" onchange="saveGoal('goalWeightMax', this.value)">
+    </div>
+    <div style="flex:1">
+      <label>Muscle Mass Target (kg)</label>
+      <input type="number" id="goalMuscleMassSetting" inputmode="decimal" step="0.1" placeholder="e.g. 75" onchange="saveGoal('goalMuscleMass', this.value)">
     </div>
   </div>
 
@@ -902,24 +952,91 @@ async function saveActivity() {
 }
 
 // --- BODY METRICS ---
+const BODY_FIELDS = [
+  { id: 'bodyWeight',   key: 'weight',          unit: 'kg' },
+  { id: 'bodyBmi',      key: 'bmi',             unit: '' },
+  { id: 'bodyFat',      key: 'body_fat',        unit: '%' },
+  { id: 'bodyMuscle',   key: 'muscle_mass',     unit: 'kg' },
+  { id: 'bodyVisceral', key: 'visceral_fat',    unit: '' },
+  { id: 'bodyBone',     key: 'bone_mass',       unit: 'kg' },
+  { id: 'bodyBmr',      key: 'bmr',             unit: 'kcal' },
+  { id: 'bodyWater',    key: 'body_water',      unit: '%' },
+  { id: 'bodyMetAge',   key: 'metabolic_age',   unit: 'yr' },
+  { id: 'bodyMq',       key: 'muscle_quality',  unit: '' },
+  { id: 'bodyType',     key: 'body_type',       unit: '' }
+];
 async function initBody() {
   document.getElementById('bodyDate').value = today();
   const bodyMetricsData = await apiFetch('GET', '/body-metrics');
   const latest = bodyMetricsData[bodyMetricsData.length-1];
-  if(latest) { ['Weight','Fat','Visceral','Muscle'].forEach(k => { const el=document.getElementById('body'+k); if(el) el.placeholder=latest[k.toLowerCase()]||''; }); }
-  renderBodyHistory(bodyMetricsData); checkBluetooth();
+  if (latest) {
+    for (const f of BODY_FIELDS) {
+      const el = document.getElementById(f.id);
+      if (el && latest[f.key] != null) el.placeholder = String(latest[f.key]);
+    }
+  }
+  renderBodyGoalsCard(latest);
+  renderBodyHistory(bodyMetricsData);
+  checkBluetooth();
 }
 async function saveBodyMetrics() {
-  const entry = { date:document.getElementById('bodyDate').value, weight:parseFloat(document.getElementById('bodyWeight').value)||null, body_fat:parseFloat(document.getElementById('bodyFat').value)||null, visceral_fat:parseFloat(document.getElementById('bodyVisceral').value)||null, muscle_mass:parseFloat(document.getElementById('bodyMuscle').value)||null };
-  if(!entry.weight&&!entry.body_fat&&!entry.visceral_fat&&!entry.muscle_mass) return;
+  const entry = { date: document.getElementById('bodyDate').value || today() };
+  let any = false;
+  for (const f of BODY_FIELDS) {
+    const v = parseFloat(document.getElementById(f.id).value);
+    entry[f.key] = isNaN(v) ? null : v;
+    if (entry[f.key] != null) any = true;
+  }
+  if (!any) return;
   await apiFetch('POST', '/body-metrics', entry);
-  ['bodyWeight','bodyFat','bodyVisceral','bodyMuscle'].forEach(id=>document.getElementById(id).value='');
-  initBody(); alert('✅ Saved!');
+  for (const f of BODY_FIELDS) document.getElementById(f.id).value = '';
+  initBody();
+  alert('✅ Saved!');
+}
+function renderBodyGoalsCard(latest) {
+  const el = document.getElementById('bodyGoalsCard');
+  if (!el) return;
+  const wtMax = parseFloat(appSettings.goalWeightMax) || 0;
+  const mmGoal = parseFloat(appSettings.goalMuscleMass) || 0;
+  if (!wtMax && !mmGoal) { el.innerHTML = ''; return; }
+  const wt = latest?.weight, mm = latest?.muscle_mass;
+  const tile = (label, actual, goal, unit, isMax) => {
+    if (!goal) return '';
+    const a = actual != null ? Number(actual) : null;
+    const ok = a != null && (isMax ? a <= goal : a >= goal);
+    const valueStyle = `font-size:20px${a != null && ok ? ';color:#4ade80' : (a != null ? ';color:#fbbf24' : '')}`;
+    const valueText = a != null
+      ? `${a}<span style="font-size:12px;color:var(--text2)"> / ${isMax ? '≤ ' : ''}${goal}${unit}</span>`
+      : `<span style="color:var(--text2)">— / ${isMax ? '≤ ' : ''}${goal}${unit}</span>`;
+    return `<div class="metric-card"><div class="value" style="${valueStyle}">${valueText}</div><div class="label">${label}</div></div>`;
+  };
+  el.innerHTML = `<div class="card">
+    <div class="card-title">🎯 Body Goals</div>
+    <div class="metric-grid">
+      ${tile('Weight', wt, wtMax, 'kg', true)}
+      ${tile('Muscle Mass', mm, mmGoal, 'kg', false)}
+    </div>
+  </div>`;
 }
 function renderBodyHistory(bodyMetricsData) {
-  const el=document.getElementById('bodyHistory');
-  if(!bodyMetricsData.length) { el.innerHTML='<div class="empty"><p>No measurements yet</p></div>'; return; }
-  el.innerHTML=bodyMetricsData.slice().reverse().map(m=>`<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div class="card-title">${formatDate(m.date)}</div><button class="btn-icon" onclick="deleteBodyEntry('${m.date}')">🗑</button></div><div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px">${m.weight?`<span>⚖️ ${m.weight}kg</span>`:''}${m.body_fat?`<span>📊 ${m.body_fat}%</span>`:''}${m.visceral_fat?`<span>🎯 VF: ${m.visceral_fat}</span>`:''}${m.muscle_mass?`<span>💪 ${m.muscle_mass}kg</span>`:''}</div></div>`).join('');
+  const el = document.getElementById('bodyHistory');
+  if (!bodyMetricsData.length) { el.innerHTML = '<div class="empty"><p>No measurements yet</p></div>'; return; }
+  el.innerHTML = bodyMetricsData.slice().reverse().map(m => {
+    const parts = [
+      m.weight        ? `⚖️ ${m.weight}kg` : '',
+      m.bmi           ? `📐 BMI ${m.bmi}` : '',
+      m.body_fat      ? `📊 ${m.body_fat}%` : '',
+      m.muscle_mass   ? `💪 ${m.muscle_mass}kg` : '',
+      m.visceral_fat  ? `🎯 VF ${m.visceral_fat}` : '',
+      m.bone_mass     ? `🦴 ${m.bone_mass}kg` : '',
+      m.bmr           ? `🔥 ${m.bmr} kcal` : '',
+      m.body_water    ? `💧 ${m.body_water}%` : '',
+      m.metabolic_age ? `🕐 age ${m.metabolic_age}` : '',
+      m.muscle_quality? `🏅 MQ ${m.muscle_quality}` : '',
+      m.body_type     ? `🧬 type ${m.body_type}` : ''
+    ].filter(Boolean).map(s => `<span>${s}</span>`).join('');
+    return `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div class="card-title">${formatDate(m.date)}</div><button class="btn-icon" onclick="deleteBodyEntry('${m.date}')">🗑</button></div><div style="display:flex;gap:14px;flex-wrap:wrap;font-size:13px">${parts}</div></div>`;
+  }).join('');
 }
 async function deleteBodyEntry(date) { if(!confirm('Delete?')) return; await apiFetch('DELETE', `/body-metrics/${date}`); initBody(); }
 
@@ -1727,6 +1844,8 @@ document.getElementById('restTimerSetting').value = DB.get('restTimer', 90);
   document.getElementById('goalProteinSetting').value = appSettings.goalProtein ?? '';
   document.getElementById('goalCarbsSetting').value = appSettings.goalCarbs ?? '';
   document.getElementById('goalWaterSetting').value = appSettings.goalWater ?? '';
+  document.getElementById('goalWeightMaxSetting').value = appSettings.goalWeightMax ?? '';
+  document.getElementById('goalMuscleMassSetting').value = appSettings.goalMuscleMass ?? '';
   renderHome();
 })();
 </script>
