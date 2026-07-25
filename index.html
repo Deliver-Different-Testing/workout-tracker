@@ -94,6 +94,7 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
 .activity-pill.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 .activity-pill.pilates.active { background:var(--purple); border-color:var(--purple); }
 .activity-pill.walk.active { background:var(--green); border-color:var(--green); color:#000; }
+.activity-pill.sauna.active { background:var(--yellow); border-color:var(--yellow); color:#000; }
 
 .week-view { display:flex; gap:4px; margin-bottom:16px; }
 .week-day { flex:1; text-align:center; padding:8px 4px; border-radius:8px; background:var(--surface); }
@@ -103,6 +104,7 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
 .dot-gym { background:var(--accent); }
 .dot-pilates { background:var(--purple); }
 .dot-walk { background:var(--green); }
+.dot-sauna { background:var(--yellow); }
 
 .tabs { display:flex; gap:4px; margin-bottom:16px; background:var(--surface); border-radius:8px; padding:4px; }
 .tab { flex:1; padding:8px; text-align:center; border-radius:6px; border:none; background:none; color:var(--text2); font-size:13px; cursor:pointer; }
@@ -142,8 +144,9 @@ label { display:block; font-size:13px; color:var(--text2); margin-bottom:4px; }
   </div>
   <h2>Log Activity</h2>
   <div class="activity-pills" id="todayActivities">
-    <button class="activity-pill pilates" onclick="logActivity('pilates')">🧘 Pilates</button>
-    <button class="activity-pill walk" onclick="logActivity('walk')">🐕 Dog Walk</button>
+    <button class="activity-pill pilates" data-type="pilates" onclick="logActivity('pilates')">🧘 Pilates</button>
+    <button class="activity-pill walk" data-type="walk" onclick="logActivity('walk')">🐕 Dog Walk</button>
+    <button class="activity-pill sauna" data-type="sauna" onclick="logActivity('sauna')">🔥 Sauna</button>
   </div>
   <h2>Start Workout</h2>
   <div id="homeWorkoutButtons"></div>
@@ -568,6 +571,7 @@ function renderWeekStreak(workoutsData, activitiesData) {
         ${hasGymWorkout ? '<div class="dot dot-gym"></div>' : ''}
         ${dayActs.some(a=>a.type==='pilates') ? '<div class="dot dot-pilates"></div>' : ''}
         ${dayActs.some(a=>a.type==='walk') ? '<div class="dot dot-walk"></div>' : ''}
+        ${dayActs.some(a=>a.type==='sauna') ? '<div class="dot dot-sauna"></div>' : ''}
       </div>
     </div>`;
   }
@@ -606,7 +610,7 @@ function renderLatestMetrics(bodyMetricsData) {
 function highlightTodayActivities(activitiesData, workoutsData) {
   const t = homeDate();
   document.querySelectorAll('#todayActivities .activity-pill').forEach(btn => {
-    const type = btn.textContent.includes('Pilates')?'pilates':'walk';
+    const type = btn.dataset.type;
     btn.classList.toggle('active', activitiesData.some(a=>a.date===t&&a.type===type));
   });
 }
@@ -629,9 +633,12 @@ function renderTodayLog(workoutsData, activitiesData) {
     </div></div>`;
   }
   todayActs.forEach(a => {
-    const icon = a.type==='pilates'?'🧘':'🐕';
+    const iconMap = { pilates:'🧘', walk:'🐕', sauna:'🔥' };
+    const labelMap = { pilates:'Pilates', walk:'Dog Walk', sauna:'Sauna' };
+    const icon = iconMap[a.type] || '•';
+    const label = labelMap[a.type] || (a.type.charAt(0).toUpperCase()+a.type.slice(1));
     html += `<div class="card"><div style="display:flex;justify-content:space-between;align-items:center">
-      <div style="flex:1"><span>${icon} ${a.type.charAt(0).toUpperCase()+a.type.slice(1)}</span> <span style="color:var(--text2)">${a.duration?a.duration+'min':''}</span>
+      <div style="flex:1"><span>${icon} ${label}</span> <span style="color:var(--text2)">${a.duration?a.duration+'min':''}</span>
       ${a.notes?`<div style="font-size:12px;color:var(--text2);margin-top:4px">${a.notes}</div>`:''}</div>
       <button class="btn-icon" onclick="deleteActivity(${a.id})" title="Delete">🗑</button>
     </div></div>`;
@@ -642,9 +649,15 @@ function renderTodayLog(workoutsData, activitiesData) {
 // --- ACTIVITIES ---
 async function logActivity(type) {
   pendingActivityType = type;
-  document.getElementById('activityModalTitle').textContent = type==='pilates'?'🧘 Log Pilates':'🐕 Log Dog Walk';
+  const config = {
+    pilates: { title: '🧘 Log Pilates', duration: '50' },
+    walk: { title: '🐕 Log Dog Walk', duration: '30' },
+    sauna: { title: '🔥 Log Sauna', duration: '25' }
+  };
+  const selected = config[type] || { title: 'Log Activity', duration: '' };
+  document.getElementById('activityModalTitle').textContent = selected.title;
   document.getElementById('actDate').value = homeDate();
-  document.getElementById('actDuration').value = type==='pilates'?'50':'30';
+  document.getElementById('actDuration').value = selected.duration;
   document.getElementById('actNotes').value = '';
   openModal('activityModal');
 }
@@ -1551,18 +1564,20 @@ function renderActivityTrends(workoutsData, activitiesData) {
     const gym=Object.keys(workoutsData).filter(d=>d>=ss&&d<=es&&workoutsData[d]?.exercises&&Object.keys(workoutsData[d].exercises).length>0).length;
     const pilates=activitiesData.filter(a=>a.date>=ss&&a.date<=es&&a.type==='pilates').length;
     const walks=activitiesData.filter(a=>a.date>=ss&&a.date<=es&&a.type==='walk').length;
-    weeks.push({label:formatDate(ss),gym,pilates,walks});
+    const sauna=activitiesData.filter(a=>a.date>=ss&&a.date<=es&&a.type==='sauna').length;
+    weeks.push({label:formatDate(ss),gym,pilates,walks,sauna});
   }
   el.innerHTML=`<div class="card"><div class="card-title">Weekly Activity (8 weeks)</div>
     ${weeks.map(w=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #222">
       <div style="width:40px;font-size:11px;color:var(--text2)">${w.label}</div>
-      <div style="flex:1;display:flex;gap:4px">
+      <div style="flex:1;display:flex;gap:4px;flex-wrap:wrap">
         ${Array(w.gym).fill('<span style="display:inline-block;width:20px;height:16px;background:var(--accent);border-radius:3px" title="Gym">🏋️</span>').join('')}
         ${Array(w.pilates).fill('<span style="display:inline-block;width:20px;height:16px;background:var(--purple);border-radius:3px" title="Pilates">🧘</span>').join('')}
         ${Array(w.walks).fill('<span style="display:inline-block;width:20px;height:16px;background:var(--green);border-radius:3px" title="Walk">🐕</span>').join('')}
-        ${!w.gym&&!w.pilates&&!w.walks?'<span style="font-size:11px;color:#555">—</span>':''}
+        ${Array(w.sauna).fill('<span style="display:inline-block;width:20px;height:16px;background:var(--yellow);border-radius:3px;color:#000" title="Sauna">🔥</span>').join('')}
+        ${!w.gym&&!w.pilates&&!w.walks&&!w.sauna?'<span style="font-size:11px;color:#555">—</span>':''}
       </div></div>`).join('')}
-    <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text2)"><span>🏋️ Gym</span><span>🧘 Pilates</span><span>🐕 Walk</span></div></div>`;
+    <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text2);flex-wrap:wrap"><span>🏋️ Gym</span><span>🧘 Pilates</span><span>🐕 Walk</span><span>🔥 Sauna</span></div></div>`;
 }
 
 // --- OURA ---
