@@ -18,4 +18,5 @@ curl -s -H "Authorization: Bearer $OURA_TOKEN" \
 cd "$DIR"
 git add oura-*.json
 git commit -m "Update Oura data $(date +%Y-%m-%d)" 2>/dev/null
-npx gh-pages -d . 2>/dev/null
+GITHUB_PAT=$(cat /data/.openclaw/workspace/secrets/github_pat.txt)
+npx gh-pages -d . -r "https://x-access-token:${GITHUB_PAT}@github.com/Deliver-Different-Testing/workout-tracker.git" 2>/dev/null
